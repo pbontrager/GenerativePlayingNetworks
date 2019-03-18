@@ -1,0 +1,10 @@
+#Dependencies
+GVGAI_GYM
+pytorch-a2c-ppo-acktr
+
+#Data
+results/*
+
+#Compile stuff
+__pycache__
+.ipynb_checkpoints
