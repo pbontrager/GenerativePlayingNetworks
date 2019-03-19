@@ -7,9 +7,11 @@ import numpy as np
 import gym
 import gym_gvgai
 
+from game.level import Level
+
 #Look at baseline wrappers and make a wrapper file: New vec_wrapper + game_wrapper
 class GridGame(gym.Wrapper):
-    def __init__(self, game, play_length, shape, lvl_map=None, generator=None):
+    def __init__(self, game, play_length, shape, ascii_map=None, generator=None):
         """Returns Grid instead of pixels
         Also unifies the reward
         Step reward: -1/play_length
@@ -19,20 +21,22 @@ class GridGame(gym.Wrapper):
         #PPO wants to maximize, Generator wants a score of 0
         --------
         """
-        gym.Wrapper.__init__(self, env)
         self.name = game
         self.env = gym_gvgai.make('gvgai-{}-lvl0-v0'.format(game))
-        self.levels = level.Levels(generator, lvl_map) if generator==None else None
+        self.levels = Level(generator, ascii_map) if generator!=None else None
+        gym.Wrapper.__init__(self, self.env)
 
         self.compiles = True
         self.state = None
+        self.steps = 0
         self.play_length = play_length
         self.shape = shape
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=shape, dtype=np.float)
 
     def reset(self):
-    	state = self.set_level()
-    	return state
+        self.steps = 0
+        state = self.set_level()
+        return state
 
     def step(self, action):
         if(not self.compiles):
@@ -40,16 +44,26 @@ class GridGame(gym.Wrapper):
         _, _, done, info = self.env.step(action)
         reward = self.get_reward(done, info["winner"] )
         state = self.get_state(info['grid'])
+        self.steps += 1
         return state, reward, done, {}
+
+    # def get_reward(self, isOver, winner):
+    #     if(isOver):
+    #         if(winner == 'PLAYER_WINS'):
+    #             return 1
+    #         else:
+    #             return -1
+    #     else:
+    #         return -1/self.play_length
 
     def get_reward(self, isOver, winner):
         if(isOver):
             if(winner == 'PLAYER_WINS'):
-                return 1
+                return 1.1 - self.steps/self.play_length
             else:
-                return -1
+                return -1.1 + self.steps/self.play_length
         else:
-            return -1/self.play_length
+            return 0
 
     def get_state(self, grid):
         state = self.pad(grid)
@@ -75,6 +89,7 @@ class GridGame(gym.Wrapper):
         else:
             lvl = random.randint(0,4)
             self.env.unwrapped._setLevel(lvl)
+            self.env.reset()
             _, _, _, info = self.env.step(0)
             state = self.get_state(info['grid'])
         self.state = state

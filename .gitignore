@@ -8,3 +8,4 @@ results/*
 #Compile stuff
 __pycache__
 .ipynb_checkpoints
+.DS_Store
