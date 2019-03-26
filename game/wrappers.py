@@ -1,6 +1,7 @@
 """
 Wrappers for VGDL Games
 """
+import os
 import random
 import numpy as np
 
@@ -9,20 +10,63 @@ import gym_gvgai
 
 from game.level import Level
 
+import a2c_ppo_acktr.envs as torch_env
+
+from baselines import bench
+from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
+from baselines.common.vec_env.shmem_vec_env import ShmemVecEnv
+from baselines.common.vec_env.vec_normalize import VecNormalize
+
+def make_env(env_def, seed, rank, log_dir, allow_early_resets):
+    def _thunk():
+        env = GridGame(*env_def)
+
+        env.seed(seed + rank)
+        obs_shape = env.observation_space.shape
+
+        if log_dir is not None:
+            env = bench.Monitor(
+                env,
+                os.path.join(log_dir, str(rank)),
+                allow_early_resets=allow_early_resets)
+        return env
+    return _thunk
+
+def make_vec_envs(env_def, seed, num_processes, gamma, log_dir, device, allow_early_resets, num_frame_stack=None):
+
+    envs = [make_env(env_def, seed, i, log_dir, allow_early_resets) for i in range(num_processes)]
+
+    if len(envs) > 1:
+        envs = ShmemVecEnv(envs, context='fork')
+    else:
+        envs = DummyVecEnv(envs)
+
+    if len(envs.observation_space.shape) == 1:
+        if gamma is None:
+            envs = VecNormalize(envs, ret=False)
+        else:
+            envs = VecNormalize(envs, gamma=gamma)
+
+    envs = torch_env.VecPyTorch(envs, device)
+
+    if num_frame_stack is not None:
+        envs = torch_env.VecPyTorchFrameStack(envs, num_frame_stack, device)
+    elif len(envs.observation_space.shape) == 3:
+        envs = torch_env.VecPyTorchFrameStack(envs, 4, device)
+
+    return envs
+
 #Look at baseline wrappers and make a wrapper file: New vec_wrapper + game_wrapper
 class GridGame(gym.Wrapper):
     def __init__(self, game, play_length, shape, ascii_map=None, generator=None):
         """Returns Grid instead of pixels
-        Also unifies the reward
-        Step reward: -1/play_length
-        Win reward: 1
-        Lose reward: -1
-        Total reward = 1 - steps/play_length
+        Sets the reward
+        Generates new level on reset
         #PPO wants to maximize, Generator wants a score of 0
         --------
         """
         self.name = game
-        self.env = gym_gvgai.make('gvgai-{}-lvl0-v0'.format(game))
+        self.env = gym_gvgai.make('gvgai-{}-lvl0-v1'.format(game))
         self.levels = Level(generator, ascii_map) if generator!=None else None
         gym.Wrapper.__init__(self, self.env)
 
@@ -42,6 +86,8 @@ class GridGame(gym.Wrapper):
         if(not self.compiles):
            return self.state, -10, True, {}
         _, _, done, info = self.env.step(action)
+        if(self.steps >= self.play_length):
+            done = True
         reward = self.get_reward(done, info["winner"] )
         state = self.get_state(info['grid'])
         self.steps += 1
@@ -59,7 +105,7 @@ class GridGame(gym.Wrapper):
     def get_reward(self, isOver, winner):
         if(isOver):
             if(winner == 'PLAYER_WINS'):
-                return 1.1 - self.steps/self.play_length
+                return  1.1 - self.steps/self.play_length
             else:
                 return -1.1 + self.steps/self.play_length
         else:

@@ -1,6 +1,6 @@
 #Dependencies
 GVGAI_GYM
-pytorch-a2c-ppo-acktr
+pytorch-*
 
 #Data
 results/*
