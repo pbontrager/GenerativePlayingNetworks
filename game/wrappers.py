@@ -17,9 +17,12 @@ from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 from baselines.common.vec_env.shmem_vec_env import ShmemVecEnv
 from baselines.common.vec_env.vec_normalize import VecNormalize
 
-def make_env(env_def, seed, rank, log_dir, allow_early_resets):
+def make_env(env_def, generator, seed, rank, log_dir, allow_early_resets):
     def _thunk():
-        env = GridGame(*env_def)
+        if(generator):
+            env = GridGame(env_def.name, env_def.length, env_def.state_shape, env_def.ascii, generator)
+        else:
+            env = GridGame(env_def.name, env_def.length, env_def.state_shape)
 
         env.seed(seed + rank)
         obs_shape = env.observation_space.shape
@@ -32,9 +35,9 @@ def make_env(env_def, seed, rank, log_dir, allow_early_resets):
         return env
     return _thunk
 
-def make_vec_envs(env_def, seed, num_processes, gamma, log_dir, device, allow_early_resets, num_frame_stack=None):
+def make_vec_envs(env_def, generator, seed, num_processes, gamma, log_dir, device, allow_early_resets, num_frame_stack=None):
 
-    envs = [make_env(env_def, seed, i, log_dir, allow_early_resets) for i in range(num_processes)]
+    envs = [make_env(env_def, generator, seed, i, log_dir, allow_early_resets) for i in range(num_processes)]
 
     if len(envs) > 1:
         envs = ShmemVecEnv(envs, context='fork')
@@ -51,8 +54,8 @@ def make_vec_envs(env_def, seed, num_processes, gamma, log_dir, device, allow_ea
 
     if num_frame_stack is not None:
         envs = torch_env.VecPyTorchFrameStack(envs, num_frame_stack, device)
-    elif len(envs.observation_space.shape) == 3:
-        envs = torch_env.VecPyTorchFrameStack(envs, 4, device)
+    #elif len(envs.observation_space.shape) == 3:
+    #    envs = torch_env.VecPyTorchFrameStack(envs, 4, device)
 
     return envs
 
