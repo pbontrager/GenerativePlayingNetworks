@@ -2,6 +2,8 @@ import copy
 import glob
 import os
 import time
+import pathlib
+import csv
 from collections import deque
 
 import gym
@@ -56,7 +58,7 @@ class PPOAgent:
     eps = 1e-5 #epsilon
     alpha = 0.99
     gamma = 0.99
-    
+
     #imitation learning with gail
     gail_batch_size = 128
     gail_epoch = 5
@@ -67,7 +69,7 @@ class PPOAgent:
         self.num_processes = processes #cpu processes
         self.lr = lr
         self.version = version
-        
+        pathlib.Path(self.save_dir).mkdir(parents=True, exist_ok=True)
         #State
         torch.manual_seed(self.seed)
         torch.cuda.manual_seed_all(self.seed)
@@ -146,21 +148,25 @@ class PPOAgent:
         print("Not using ob_rms: {}".format(ob_rms))
         utils.get_vec_normalize(self.envs).ob_rms = ob_rms
         self.actor_critic = policy
-    
+
     def save(self, path, version):
         ob_rms = getattr(utils.get_vec_normalize(self.envs), 'ob_rms', None)
         torch.save([self.actor_critic, ob_rms], 
             os.path.join(path, "agent_{}.tar".format(version)))
 
-    def report(self, version, total_num_steps, FPS, mean_reward, median_reward, min_reward, max_reward):
+    def report(self, version, total_num_steps, FPS, rewards):
         file_path = os.path.join(self.save_dir, "actor_critic_results.csv")
         add_header = not os.path.exists(file_path)
+        if(len(rewards) > 0):
+            mean, median, min, max = np.mean(rewards), np.median(rewards), np.min(rewards), np.max(rewards)
+        else:
+            mean, median, min, max = np.nan, np.nan, np.nan, np.nan
         with open(file_path, 'a+') as results:
             writer = csv.writer(results)
             if(add_header):
-                header = ['update', 'total_steps', 'FPS', 'last_reward', 'mean_reward', 'median_reward', 'min_reward', 'max_reward']
+                header = ['update', 'total_steps', 'FPS', 'mean_reward', 'median_reward', 'min_reward', 'max_reward']
                 writer.writerow(header)
-            writer.writerow((version, total_num_steps, FPS, last_reward, mean_reward, median_reward, min_reward, max_reward))
+            writer.writerow((version, total_num_steps, FPS, mean, median, min, max))
 
     def set_handmade_envs(self):
         if(not self.handmade):
@@ -171,7 +177,7 @@ class PPOAgent:
         if(self.handmade):
             self.envs = make_vec_envs(self.env_def, self.gen, self.seed, self.num_processes, self.gamma, self.log_dir, self.device, False)
             self.handmade = False
-    
+
     def play(self, env, runs=1, visual=False):
         score_mean, step_mean, win_mean = 0, 0, 0
         for i in range(runs):
@@ -180,13 +186,12 @@ class PPOAgent:
             step_mean += steps/runs
             win_mean += win/runs
         return score_mean, step_mean, win_mean
-            
+
     def play_game(self, env, visual=False):
         raise Exception("Not implemented")
 
     def train_agent(self, num_env_steps):
         env_name = self.env_def.name
-        print(env_name + ' delete me, PPOAgent.py')
 
         obs = self.envs.reset()
         self.rollouts.obs[0].copy_(obs)
@@ -261,8 +266,7 @@ class PPOAgent:
             if (j % self.save_interval == 0 or j == num_updates - 1) and self.save_dir != "":
                 self.version += 1
                 #self.save(self.version)
-                report(self.version, total_num_steps, int(total_num_steps / (end - start)), 
-                    np.mean(episode_rewards), np.median(episode_rewards), np.min(episode_rewards), np.max(episode_rewards))
+                self.report(self.version, total_num_steps, int(total_num_steps / (end - start)), episode_rewards)
 
             if j % self.log_interval == 0 and len(episode_rewards) > 1:
                 print(

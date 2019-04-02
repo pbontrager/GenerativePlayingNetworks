@@ -1,9 +1,11 @@
 #Dependencies
 GVGAI_GYM
 pytorch-*
+baselines
 
 #Data
 results/*
+trained_models/*
 
 #Compile stuff
 __pycache__

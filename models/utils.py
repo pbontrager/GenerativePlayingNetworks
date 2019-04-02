@@ -8,7 +8,7 @@ class Resize(nn.Module):
     def __init__(self, shape):
         super(Resize, self).__init__()
         self.shape = shape
-        
+
     def forward(self, x):
         return nn.functional.interpolate(x, size=self.shape, mode='bilinear', align_corners=True)
 
@@ -17,8 +17,15 @@ class LevelAdapter(nn.Module):
         super(LevelAdapter, self).__init__()
         self.shape = shape
         self.mapping = mapping
-        
+
+        self.register_buffer('zero', None)
+
+    def set_zero(self, x):
+        self.zero = x.new(x.size(0), 1, x.size(2), x.size(3)).zero_()
+
     def forward(self, x):
+        if(self.zero is None):
+            self.set_zero(x)
         layers = []
         d, w, h = self.shape
         for i in range(d):
@@ -26,7 +33,6 @@ class LevelAdapter(nn.Module):
                 idx = self.mapping.index(i)
                 layers.append(x[:, idx:idx+1])
             else:
-                zero = torch.zeros(x.size(0), 1, x.size(2), x.size(3)) #requires_grad=True
-                layers.append(zero)
+                layers.append(self.zero)
         x = torch.cat(layers, dim=1)
         return x

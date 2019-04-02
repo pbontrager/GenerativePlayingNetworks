@@ -5,12 +5,13 @@ import torch.nn.functional as F
 
 from functools import reduce
 from operator import mul
+import math
 
 from a2c_ppo_acktr.distributions import Bernoulli, Categorical, DiagGaussian
 from a2c_ppo_acktr.utils import init
 
 import models.utils as utils
-
+import pdb
 
 class Flatten(nn.Module):
     def forward(self, x):
@@ -181,15 +182,21 @@ class CNNBase(NNBase):
         self.blocks = nn.ModuleList()
         in_ch = num_inputs
         out_ch = 32
-        for s in shapes:
+        halfway = math.ceil(len(shapes)/2)
+        for i, s in enumerate(shapes):
             block = nn.Sequential(
                 utils.Resize(s),
-                init_(nn.Conv2d(in_ch, out_ch, 3, padding=1)), 
+                init_(nn.Conv2d(in_ch, out_ch, 3, padding=1)),
                 nn.ReLU())
             in_ch = out_ch
-            out_ch = in_ch * 2
+            if(i+1 == halfway and len(shapes)%2==0):
+                out_ch = in_ch
+            elif(i+1 < halfway):
+                out_ch = in_ch*2
+            else:
+                out_ch = in_ch//2
             self.blocks.append(block)
-        block = nn.Sequential(init_(nn.Linear(in_ch * reduce(mul, shapes[-1]), hidden_size)), nn.ReLU())
+        block = nn.Sequential(Flatten(), init_(nn.Linear(in_ch * reduce(mul, shapes[-1]), hidden_size)), nn.ReLU())
         self.blocks.append(block)
 
         # self.main = nn.Sequential(

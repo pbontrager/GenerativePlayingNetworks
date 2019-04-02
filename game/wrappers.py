@@ -17,6 +17,8 @@ from baselines.common.vec_env.dummy_vec_env import DummyVecEnv
 from baselines.common.vec_env.shmem_vec_env import ShmemVecEnv
 from baselines.common.vec_env.vec_normalize import VecNormalize
 
+import pdb
+
 def make_env(env_def, generator, seed, rank, log_dir, allow_early_resets):
     def _thunk():
         if(generator):
@@ -24,7 +26,7 @@ def make_env(env_def, generator, seed, rank, log_dir, allow_early_resets):
         else:
             env = GridGame(env_def.name, env_def.length, env_def.state_shape)
 
-        env.seed(seed + rank)
+        #env.seed(seed + rank)
         obs_shape = env.observation_space.shape
 
         if log_dir is not None:
@@ -78,7 +80,7 @@ class GridGame(gym.Wrapper):
         self.steps = 0
         self.play_length = play_length
         self.shape = shape
-        self.observation_space = gym.spaces.Box(low=0, high=1, shape=shape, dtype=np.float)
+        self.observation_space = gym.spaces.Box(low=0, high=1, shape=shape, dtype=np.float32)
 
     def reset(self):
         self.steps = 0
@@ -86,6 +88,7 @@ class GridGame(gym.Wrapper):
         return state
 
     def step(self, action):
+        action = action.item()
         if(not self.compiles):
            return self.state, -10, True, {}
         _, _, done, info = self.env.step(action)
@@ -117,7 +120,7 @@ class GridGame(gym.Wrapper):
     def get_state(self, grid):
         state = self.pad(grid)
         state = self.background(state)
-        self.state = state
+        self.state = state.astype('float32')
         return state
 
     def set_level(self):
@@ -128,11 +131,11 @@ class GridGame(gym.Wrapper):
                 self.levels.test(self.env)
                 self.compiles = True
             except Exception as e:
-                #print(e)
+                print(e)
                 self.compiles = False
                 self.restart()
             except SystemExit:
-                #print("SystemExit")
+                print("SystemExit")
                 self.compiles = False
                 self.restart()
         else:
@@ -143,7 +146,7 @@ class GridGame(gym.Wrapper):
             state = self.get_state(info['grid'])
         self.state = state
         return state
-        
+
     def pad(self, state):
         pad_h = max(self.shape[-2] - state.shape[-2], 0)
         pad_w = max(self.shape[-1] - state.shape[-1], 0)
@@ -151,7 +154,7 @@ class GridGame(gym.Wrapper):
         pad_width = (pad_w//2, pad_w-pad_w//2)
         padding = ((0,0), pad_height, pad_width)
         return np.pad(state, padding, 'constant')
-        
+
     def background(self, state):
         background = 1 - np.clip(np.sum(state, 0), 0, 1)
         background = np.expand_dims(background, 0)
