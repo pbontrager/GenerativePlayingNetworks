@@ -24,7 +24,7 @@ class LevelAdapter(nn.Module):
         self.zero = x.new(x.size(0), 1, x.size(2), x.size(3)).zero_()
 
     def forward(self, x):
-        if(self.zero is None):
+        if(self.zero is None or self.zero.size(0) != x.size(0)):
             self.set_zero(x)
         layers = []
         d, w, h = self.shape

@@ -4,6 +4,7 @@ import os
 import time
 import pathlib
 import csv
+import atexit
 from collections import deque
 
 import gym
@@ -69,7 +70,12 @@ class PPOAgent:
         self.num_processes = processes #cpu processes
         self.lr = lr
         self.version = version
+
+        #Setup
         pathlib.Path(self.save_dir).mkdir(parents=True, exist_ok=True)
+        if(self.num_mini_batch > processes):
+            self.num_mini_batch = processes
+
         #State
         torch.manual_seed(self.seed)
         torch.cuda.manual_seed_all(self.seed)
@@ -170,12 +176,16 @@ class PPOAgent:
 
     def set_handmade_envs(self):
         if(not self.handmade):
-            self.envs = make_vec_envs(self.env_def, None, self.seed, self.num_processes, self.gamma, self.log_dir, self.device, False)
+            if(self.envs is not None):
+                self.envs.close()
+            self.envs = make_vec_envs(self.env_def, None, self.seed, self.num_processes, self.gamma, self.log_dir, self.device, True)
             self.handmade = True
 
     def set_generated_envs(self):
         if(self.handmade):
-            self.envs = make_vec_envs(self.env_def, self.gen, self.seed, self.num_processes, self.gamma, self.log_dir, self.device, False)
+            if(self.envs is not None):
+                self.envs.close()
+            self.envs = make_vec_envs(self.env_def, self.gen, self.seed, self.num_processes, self.gamma, self.log_dir, self.device, True)
             self.handmade = False
 
     def play(self, env, runs=1, visual=False):

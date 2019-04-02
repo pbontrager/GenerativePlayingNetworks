@@ -4,8 +4,9 @@ pytorch-*
 baselines
 
 #Data
-results/*
+experiments/*
 trained_models/*
+log*
 
 #Compile stuff
 __pycache__

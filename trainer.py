@@ -96,7 +96,7 @@ class Trainer(object):
             if(self.version == 0):
                 self.agent.set_handmade_envs() #Pretrain on existing levels
             else:
-                self.agent.set_generator_envs()
+                self.agent.set_generated_envs()
 
             self.unfreeze_weights(self.agent.actor_critic.base)
             self.agent.train_agent(rl_steps)
@@ -118,9 +118,11 @@ class Trainer(object):
 
             #Save and report results
             loss += gen_loss.item()
+            self.version += 1
             save_frequency = 10
             if(update%save_frequency == 0):
                 self.save_models(update, gen_loss)
                 self.save_loss(update, loss/save_frequency)
                 print('[{}] Gen Loss: {}'.format(update, loss/save_frequency))
                 loss = 0
+        self.agent.envs.close()

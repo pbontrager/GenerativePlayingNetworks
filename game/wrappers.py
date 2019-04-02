@@ -22,9 +22,9 @@ import pdb
 def make_env(env_def, generator, seed, rank, log_dir, allow_early_resets):
     def _thunk():
         if(generator):
-            env = GridGame(env_def.name, env_def.length, env_def.state_shape, env_def.ascii, generator)
+            env = GridGame(env_def.name, env_def.length, env_def.state_shape, env_def.ascii, generator, id=rank)
         else:
-            env = GridGame(env_def.name, env_def.length, env_def.state_shape)
+            env = GridGame(env_def.name, env_def.length, env_def.state_shape, id=rank)
 
         #env.seed(seed + rank)
         obs_shape = env.observation_space.shape
@@ -63,13 +63,14 @@ def make_vec_envs(env_def, generator, seed, num_processes, gamma, log_dir, devic
 
 #Look at baseline wrappers and make a wrapper file: New vec_wrapper + game_wrapper
 class GridGame(gym.Wrapper):
-    def __init__(self, game, play_length, shape, ascii_map=None, generator=None):
+    def __init__(self, game, play_length, shape, ascii_map=None, generator=None, id=0):
         """Returns Grid instead of pixels
         Sets the reward
         Generates new level on reset
         #PPO wants to maximize, Generator wants a score of 0
         --------
         """
+        self.id = id
         self.name = game
         self.env = gym_gvgai.make('gvgai-{}-lvl0-v1'.format(game))
         self.levels = Level(generator, ascii_map) if generator!=None else None
@@ -146,6 +147,10 @@ class GridGame(gym.Wrapper):
             state = self.get_state(info['grid'])
         self.state = state
         return state
+
+    def log(self, text):
+        with open("log_{}.txt".format(self.id), 'a+') as log:
+            log.write(str(text) + "\n")
 
     def pad(self, state):
         pad_h = max(self.shape[-2] - state.shape[-2], 0)
