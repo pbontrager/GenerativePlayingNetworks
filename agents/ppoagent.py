@@ -20,7 +20,7 @@ from a2c_ppo_acktr.arguments import get_args
 from a2c_ppo_acktr.storage import RolloutStorage
 #from a2c_ppo_acktr.evaluation import evaluate
 
-from game.wrappers import make_vec_envs
+from game.wrappers import make_vec_envs, GridGame
 from models.policy import Policy
 
 #import pdb; pdb.set_trace()
@@ -64,9 +64,8 @@ class PPOAgent:
     gail_batch_size = 128
     gail_epoch = 5
 
-    def __init__(self, env_def, generator, processes=1, version=0, lr=2.5e-4):
+    def __init__(self, env_def, processes=1, version=0, lr=2.5e-4):
         self.env_def = env_def
-        self.gen = generator
         self.num_processes = processes #cpu processes
         self.lr = lr
         self.version = version
@@ -89,9 +88,9 @@ class PPOAgent:
 
         torch.set_num_threads(1)
 
-        self.handmade = None
+        self.level_path = None
         self.envs = None
-        self.set_handmade_envs()
+        self.set_envs()
 
         if(version > 0):
             self.actor_critic = self.load(path, version)
@@ -174,31 +173,52 @@ class PPOAgent:
                 writer.writerow(header)
             writer.writerow((version, total_num_steps, FPS, mean, median, min, max))
 
-    def set_handmade_envs(self):
-        if(not self.handmade):
+    def set_envs(self, level_path=None):
+        if(level_path != self.level_path or self.envs is None):
+            pdb.set_trace()
             if(self.envs is not None):
                 self.envs.close()
-            self.envs = make_vec_envs(self.env_def, None, self.seed, self.num_processes, self.gamma, self.log_dir, self.device, True)
-            self.handmade = True
-
-    def set_generated_envs(self):
-        if(self.handmade):
-            if(self.envs is not None):
-                self.envs.close()
-            self.envs = make_vec_envs(self.env_def, self.gen, self.seed, self.num_processes, self.gamma, self.log_dir, self.device, True)
-            self.handmade = False
+            self.level_path = level_path
+            self.envs = make_vec_envs(self.env_def, level_path, self.seed, self.num_processes, self.gamma, self.log_dir, self.device, True)
 
     def play(self, env, runs=1, visual=False):
-        score_mean, step_mean, win_mean = 0, 0, 0
+        env = GridGame()
+        reward_mean = 0
         for i in range(runs):
-            score, steps, win = self.play_game(env, visual)
-            score_mean += score/runs
-            step_mean += steps/runs
-            win_mean += win/runs
-        return score_mean, step_mean, win_mean
+            score = self.play_game(env, visual)
+            reward_mean += score/runs
+        return score_mean
 
-    def play_game(self, env, visual=False):
-        raise Exception("Not implemented")
+    def play_game(self, level):
+        eval_envs = make_vec_envs(env_name, self.seed + self.num_processes, self.num_processes,
+                              None, eval_log_dir, device, True)
+
+        vec_norm = utils.get_vec_normalize(eval_envs)
+        if vec_norm is not None:
+            vec_norm.eval()
+            vec_norm.ob_rms = ob_rms
+
+        eval_episode_rewards = []
+
+        obs = eval_envs.reset()
+        eval_recurrent_hidden_states = torch.zeros(self.num_processes, self.actor_critic.recurrent_hidden_state_size).to(self.device)
+        eval_masks = torch.zeros(self.num_processes, 1).to(self.device)
+
+        while len(eval_episode_rewards) < 10:
+            with torch.no_grad():
+                _, action, _, eval_recurrent_hidden_states = actor_critic.act(
+                    obs,
+                    eval_recurrent_hidden_states,
+                    eval_masks,
+                    deterministic=True)
+
+            # Obser reward and next obs
+            obs, _, done, infos = eval_envs.step(action)
+            eval_masks = torch.tensor([[0.0] if done_ else [1.0] for done_ in done], dtype=torch.float32).to(device)
+
+            if(done):
+                print("Done!")
+        eval_envs.close()
 
     def train_agent(self, num_env_steps):
         env_name = self.env_def.name
@@ -287,10 +307,3 @@ class PPOAgent:
                             np.median(episode_rewards), np.min(episode_rewards),
                             np.max(episode_rewards), dist_entropy, value_loss,
                             action_loss))
-
-            if (self.eval_interval is not None and len(episode_rewards) > 1
-                    and j % self.eval_interval == 0):
-                raise Exception("Evaluate not implemented yet")
-                ob_rms = utils.get_vec_normalize(self.envs).ob_rms
-                evaluate(self.actor_critic, ob_rms, env_name, self.seed,
-                         self.num_processes, self.eval_log_dir, self.device)

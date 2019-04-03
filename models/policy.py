@@ -216,7 +216,7 @@ class CNNBase(NNBase):
         x = inputs
         for b in self.blocks:
             x = b(x)
-
+            
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
 

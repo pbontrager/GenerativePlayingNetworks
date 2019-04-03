@@ -1,9 +1,13 @@
 import os
 import csv
 import pathlib
+import tempfile
+import numpy as np
 
 import torch
 import torch.nn.functional as F
+
+import pdb
 
 class Trainer(object):
     def __init__(self, gen, agent, save, version=0):
@@ -11,7 +15,8 @@ class Trainer(object):
         self.generator = gen.to(self.device)
         self.gen_optimizer = torch.optim.Adam(self.generator.parameters(), lr = 0.001) #0.0001
         self.agent = agent
-
+        self.temp_dir = tempfile.TemporaryDirectory()
+        
         self.save_paths = {'dir':save}
         self.save_paths['agent'] = os.path.join(save,'agents')
         self.save_paths['models'] = os.path.join(save,'models')
@@ -54,12 +59,26 @@ class Trainer(object):
                 writer.writerow(header)
             writer.writerow((update, gen_loss))
 
-    def save_levels(self, tensor, compiled, win, length):
-        raise Exception("Not implemented")
-        levels = self.game.create_levels(tensor)
-        for i in range(tensor.size(0)):
-            self.game.record(levels[i], compiled[i].item(), win[i].item(), length[i].item(), self.save_paths['levels'])
+    def save_levels(self, update, strings, rewards, expected_rewards):
+        add_header = not os.path.exists(self.save_paths['levels'])
+        with open(self.save_paths['levels'], 'a+') as results:
+            writer = csv.writer(results)
+            if(add_header):
+                header = ['update', 'level', 'reward', 'expected_reward']
+                writer.writerow(header)
+            for i in range(len(strings)):
+                writer.writerow((update, strings[i], rewards[i], expected_rewards[i].item()))
 
+    def new_levels(self, num):
+        lvl_tensor, states = self.generator.new(num)
+        lvl_strs = self.agent.env_def.create_levels(lvl_tensor)
+        for i in range(num):
+            path = os.path.join(self.temp_dir.name, "lvl_{}".format(i))
+            np.save(path + ".npy", states[i].cpu().numpy())
+            with open(path + ".txt", 'w') as file:
+                file.write(lvl_strs[i])
+        return lvl_strs, states
+            
     def freeze_weights(self, model):
         for p in model.parameters():
             p.requires_grad = False
@@ -71,32 +90,31 @@ class Trainer(object):
     def z_generator(self, batch_size, z_size):
         return lambda:torch.Tensor(batch_size, z_size).normal_().to(self.device)
 
-    def critic(self, batch_size):
-        rnn_hxs = torch.zeros(batch_size, self.agent.actor_critic.recurrent_hidden_state_size).to(self.device)
-        masks = torch.ones(batch_size, 1).to(self.device)
-        return lambda x: self.agent.actor_critic.get_value(x, rnn_hxs, masks)
+    def critic(self, x):
+        rnn_hxs = torch.zeros(x.size(0), self.agent.actor_critic.recurrent_hidden_state_size).to(self.device)
+        masks = torch.ones(x.size(0), 1).to(self.device)
+        return self.agent.actor_critic.get_value(x, rnn_hxs, masks)
 
-    # def eval_levels(self, tensor):
-    #     raise Exception("Not implemented")
-    #     levels = self.game.create_levels(tensor)
-    #     compiled, win, length = self.game.targets(self.agent, levels)
-    #     c = torch.Tensor(compiled).unsqueeze(1).to(self.device)
-    #     w = torch.Tensor(win).unsqueeze(1).to(self.device)
-    #     l = torch.Tensor(length).unsqueeze(1).to(self.device)
-    #     return c, w, l
+    def eval_levels(self, tensor):
+        #raise Exception("Not implemented")
+        #levels = self.game.create_levels(tensor)
+        #What to pass to play?
+        #File Names?
+        #Create new envs for evaluation...
+        rewards = self.agent.play(levels)
+        return rewards
 
     def train(self, updates, batch_size, rl_steps):
         self.generator.train()
-
         z = self.z_generator(batch_size, self.generator.z_size)
-        critic = self.critic(batch_size)
 
         loss = 0
         for update in range(self.version + 1, self.version + updates + 1):
             if(self.version == 0):
-                self.agent.set_handmade_envs() #Pretrain on existing levels
+                self.agent.set_envs() #Pretrain on existing levels
             else:
-                self.agent.set_generated_envs()
+                self.new_levels(batch_size)
+                self.agent.set_envs(self.temp_dir.name)
 
             self.unfreeze_weights(self.agent.actor_critic.base)
             self.agent.train_agent(rl_steps)
@@ -105,16 +123,19 @@ class Trainer(object):
             self.gen_optimizer.zero_grad()
             levels = self.generator(z())
             states = self.generator.adapter(levels)
-            expected_value = critic(states)
+            expected_value = self.critic(states)
             target = torch.ones(batch_size).to(self.device)
             gen_loss = F.mse_loss(expected_value, target)
             gen_loss.backward()
             self.gen_optimizer.step()
 
             #Save a generated level
-            #levels = self.generator(z())
-            #self.eval_levels()
-            #self.save_levels(levels, expected_rewards, real_rewards)
+            levels, states = self.new_levels(1)
+            with torch.no_grad():
+                expected_rewards = self.critic(states)
+            #real_rewards = self.eval_levels(levels)
+            real_rewards = 'Nan'
+            self.save_levels(update, levels, real_rewards, expected_rewards)
 
             #Save and report results
             loss += gen_loss.item()

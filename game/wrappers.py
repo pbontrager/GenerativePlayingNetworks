@@ -5,10 +5,10 @@ import os
 import random
 import numpy as np
 
+import timeout_decorator
+
 import gym
 import gym_gvgai
-
-from game.level import Level
 
 import a2c_ppo_acktr.envs as torch_env
 
@@ -19,10 +19,10 @@ from baselines.common.vec_env.vec_normalize import VecNormalize
 
 import pdb
 
-def make_env(env_def, generator, seed, rank, log_dir, allow_early_resets):
+def make_env(env_def, path, seed, rank, log_dir, allow_early_resets):
     def _thunk():
-        if(generator):
-            env = GridGame(env_def.name, env_def.length, env_def.state_shape, env_def.ascii, generator, id=rank)
+        if(path):
+            env = GridGame(env_def.name, env_def.length, env_def.state_shape, path, id=rank)
         else:
             env = GridGame(env_def.name, env_def.length, env_def.state_shape, id=rank)
 
@@ -37,9 +37,9 @@ def make_env(env_def, generator, seed, rank, log_dir, allow_early_resets):
         return env
     return _thunk
 
-def make_vec_envs(env_def, generator, seed, num_processes, gamma, log_dir, device, allow_early_resets, num_frame_stack=None):
+def make_vec_envs(env_def, level_path, seed, num_processes, gamma, log_dir, device, allow_early_resets, num_frame_stack=None):
 
-    envs = [make_env(env_def, generator, seed, i, log_dir, allow_early_resets) for i in range(num_processes)]
+    envs = [make_env(env_def, level_path, seed, i, log_dir, allow_early_resets) for i in range(num_processes)]
 
     if len(envs) > 1:
         envs = ShmemVecEnv(envs, context='fork')
@@ -63,7 +63,7 @@ def make_vec_envs(env_def, generator, seed, num_processes, gamma, log_dir, devic
 
 #Look at baseline wrappers and make a wrapper file: New vec_wrapper + game_wrapper
 class GridGame(gym.Wrapper):
-    def __init__(self, game, play_length, shape, ascii_map=None, generator=None, id=0):
+    def __init__(self, game, play_length, shape, path=None, id=0):
         """Returns Grid instead of pixels
         Sets the reward
         Generates new level on reset
@@ -72,8 +72,8 @@ class GridGame(gym.Wrapper):
         """
         self.id = id
         self.name = game
+        self.levels = path
         self.env = gym_gvgai.make('gvgai-{}-lvl0-v1'.format(game))
-        self.levels = Level(generator, ascii_map) if generator!=None else None
         gym.Wrapper.__init__(self, self.env)
 
         self.compiles = True
@@ -126,17 +126,20 @@ class GridGame(gym.Wrapper):
 
     def set_level(self):
         if(self.levels):
-            state = self.levels.new_level()
+            level_names = [file for file in os.listdir(self.levels) if file.endswith('.txt')]
+            selection = random.randint(0, len(level_names) - 1)
+            path = os.path.join(self.levels, level_names[selection][:-4])
+            state = np.load(path + ".npy")
             try:
-                self.env.unwrapped._setLevel(self.levels.path)
-                self.levels.test(self.env)
+                self.env.unwrapped._setLevel(path + ".txt")
+                self.test_level()
                 self.compiles = True
             except Exception as e:
-                print(e)
+                #print(e)
                 self.compiles = False
                 self.restart()
             except SystemExit:
-                print("SystemExit")
+                #print("SystemExit")
                 self.compiles = False
                 self.restart()
         else:
@@ -151,6 +154,12 @@ class GridGame(gym.Wrapper):
     def log(self, text):
         with open("log_{}.txt".format(self.id), 'a+') as log:
             log.write(str(text) + "\n")
+
+    @timeout_decorator.timeout(1)
+    def test_level(self):
+        self.env.reset()
+        self.env.step(0)
+        self.env.reset()
 
     def pad(self, state):
         pad_h = max(self.shape[-2] - state.shape[-2], 0)

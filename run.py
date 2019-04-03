@@ -14,14 +14,12 @@ def main(game_name, game_length):
 
 	#Agent
 	num_processes = 8
-	agent = PPOAgent(env, gen, num_processes)
+	agent = PPOAgent(env, num_processes)
 
 	#Training
 	t = Trainer(gen, agent, "experiments", 0)
 	t.train(4, 32, 1024)
-	#t.train(100, 32, 8000) #100 gen updates in batches of 32, 8 training processes for 8000 steps
-	# 32 x 2000 steps x 100 = 6.4m steps
-	#Should be process based: 8 x ~1000 steps x 800 = 6.4m steps
+	#t.train(10e6, 8192, 32) #10m training steps, in batches of 8192 steps per 32 levels
 
 if(__name__ == "__main__"):
 	main('aliens', 2000)
