@@ -15,12 +15,11 @@ class Generator(nn.Module):
     def forward(self, x):
         return self.gen_lvl(x)
 
-    def new(self, batch):
+    def new(self, z):
         with torch.no_grad():
-            z = torch.Tensor(batch, self.z_size).uniform_(0, 1)
             lvl = self.forward(z)
             state = self.adapter(lvl)
         return lvl, state
 
     def adapter(self, x):
-        return self.lvl_to_state(x) 
+        return self.lvl_to_state(x)

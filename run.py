@@ -18,7 +18,7 @@ def main(game_name, game_length):
 
 	#Training
 	t = Trainer(gen, agent, "experiments", 0)
-	t.train(4, 32, 1024)
+	t.train(1000, 32, 8192)
 	#t.train(10e6, 8192, 32) #10m training steps, in batches of 8192 steps per 32 levels
 
 if(__name__ == "__main__"):

@@ -16,7 +16,7 @@ class Trainer(object):
         self.gen_optimizer = torch.optim.Adam(self.generator.parameters(), lr = 0.001) #0.0001
         self.agent = agent
         self.temp_dir = tempfile.TemporaryDirectory()
-        
+
         self.save_paths = {'dir':save}
         self.save_paths['agent'] = os.path.join(save,'agents')
         self.save_paths['models'] = os.path.join(save,'models')
@@ -70,7 +70,8 @@ class Trainer(object):
                 writer.writerow((update, strings[i], rewards[i], expected_rewards[i].item()))
 
     def new_levels(self, num):
-        lvl_tensor, states = self.generator.new(num)
+        z = torch.Tensor(num, self.generator.z_size).uniform_(0, 1).to(self.device)
+        lvl_tensor, states = self.generator.new(z)
         lvl_strs = self.agent.env_def.create_levels(lvl_tensor)
         for i in range(num):
             path = os.path.join(self.temp_dir.name, "lvl_{}".format(i))
@@ -78,7 +79,7 @@ class Trainer(object):
             with open(path + ".txt", 'w') as file:
                 file.write(lvl_strs[i])
         return lvl_strs, states
-            
+
     def freeze_weights(self, model):
         for p in model.parameters():
             p.requires_grad = False
@@ -134,7 +135,7 @@ class Trainer(object):
             with torch.no_grad():
                 expected_rewards = self.critic(states)
             #real_rewards = self.eval_levels(levels)
-            real_rewards = 'Nan'
+            real_rewards = ['Nan']
             self.save_levels(update, levels, real_rewards, expected_rewards)
 
             #Save and report results

@@ -1,3 +1,4 @@
+
 """
 Wrappers for VGDL Games
 """
@@ -136,10 +137,16 @@ class GridGame(gym.Wrapper):
                 self.compiles = True
             except Exception as e:
                 #print(e)
+                self.log(e)
                 self.compiles = False
                 self.restart()
+            except timeout_decorator.TimeoutError:
+                #print("Timeout")
+                self.log("Timeout")
+                self.compiles = False
             except SystemExit:
                 #print("SystemExit")
+                self.log("SystemExit")
                 self.compiles = False
                 self.restart()
         else:

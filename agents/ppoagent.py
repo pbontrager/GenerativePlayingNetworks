@@ -175,7 +175,6 @@ class PPOAgent:
 
     def set_envs(self, level_path=None):
         if(level_path != self.level_path or self.envs is None):
-            pdb.set_trace()
             if(self.envs is not None):
                 self.envs.close()
             self.level_path = level_path
