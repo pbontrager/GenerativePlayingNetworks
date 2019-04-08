@@ -113,6 +113,7 @@ class Trainer(object):
         for update in range(self.version + 1, self.version + updates + 1):
             if(self.version == 0):
                 self.agent.set_envs() #Pretrain on existing levels
+                self.agent.train_agent(7*rl_steps)
             else:
                 self.new_levels(batch_size)
                 self.agent.set_envs(self.temp_dir.name)
@@ -121,14 +122,15 @@ class Trainer(object):
             self.agent.train_agent(rl_steps)
             self.freeze_weights(self.agent.actor_critic.base)
 
-            self.gen_optimizer.zero_grad()
-            levels = self.generator(z())
-            states = self.generator.adapter(levels)
-            expected_value = self.critic(states)
-            target = torch.ones(batch_size).to(self.device)
-            gen_loss = F.mse_loss(expected_value, target)
-            gen_loss.backward()
-            self.gen_optimizer.step()
+            for i in range(100):
+                self.gen_optimizer.zero_grad()
+                levels = self.generator(z())
+                states = self.generator.adapter(levels)
+                expected_value = self.critic(states)
+                target = torch.ones(batch_size).to(self.device)
+                gen_loss = F.mse_loss(expected_value, target)
+                gen_loss.backward()
+                self.gen_optimizer.step()
 
             #Save a generated level
             levels, states = self.new_levels(1)
