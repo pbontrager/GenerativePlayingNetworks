@@ -13,7 +13,7 @@ def main(game_name, game_length):
 	gen = Generator(latent_shape, env)
 
 	#Agent
-	num_processes = 8
+	num_processes = 1
 	agent = PPOAgent(env, num_processes)
 
 	#Training

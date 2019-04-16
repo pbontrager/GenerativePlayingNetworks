@@ -110,14 +110,19 @@ class GridGame(gym.Wrapper):
     #     else:
     #         return -1/self.play_length
 
+    #def get_reward(self, isOver, winner):
+    #    if(isOver):
+    #        if(winner == 'PLAYER_WINS'):
+    #            return  1.1 - self.steps/self.play_length
+    #        else:
+    #            return -1.1 + self.steps/self.play_length
+    #    else:
+    #        return 0
+
     def get_reward(self, isOver, winner):
         if(isOver):
-            if(winner == 'PLAYER_WINS'):
-                return  1.1 - self.steps/self.play_length
-            else:
-                return -1.1 + self.steps/self.play_length
-        else:
             return 0
+        return 1/self.play_length
 
     def get_state(self, grid):
         state = self.pad(grid)
@@ -137,15 +142,18 @@ class GridGame(gym.Wrapper):
                 self.compiles = True
             except Exception as e:
                 #print(e)
+                pdb.set_trace()
                 self.log(e)
                 self.compiles = False
                 self.restart()
             except timeout_decorator.TimeoutError:
                 #print("Timeout")
+                pdb.set_trace()
                 self.log("Timeout")
                 self.compiles = False
             except SystemExit:
                 #print("SystemExit")
+                pdb.set_trace()
                 self.log("SystemExit")
                 self.compiles = False
                 self.restart()
