@@ -136,27 +136,24 @@ class GridGame(gym.Wrapper):
             selection = random.randint(0, len(level_names) - 1)
             path = os.path.join(self.levels, level_names[selection][:-4])
             state = np.load(path + ".npy")
+            if(len(state.shape) == 4):
+                self.compiles = False
+                self.state = state
+                return state
             try:
                 self.env.unwrapped._setLevel(path + ".txt")
                 self.test_level()
                 self.compiles = True
             except Exception as e:
                 #print(e)
-                pdb.set_trace()
-                self.log(e)
-                self.compiles = False
-                self.restart()
+                self.restart(e, path, state)
             except timeout_decorator.TimeoutError:
                 #print("Timeout")
                 pdb.set_trace()
-                self.log("Timeout")
-                self.compiles = False
+                self.restart("Timeout", path, state)
             except SystemExit:
                 #print("SystemExit")
-                pdb.set_trace()
-                self.log("SystemExit")
-                self.compiles = False
-                self.restart()
+                self.restart("SystemExit", path, state)
         else:
             lvl = random.randint(0,4)
             self.env.unwrapped._setLevel(lvl)
@@ -189,5 +186,9 @@ class GridGame(gym.Wrapper):
         background = np.expand_dims(background, 0)
         return np.concatenate([state, background])
 
-    def restart(self):
+    def restart(self, e, path, state):
+        self.log(e)
+        state = np.expand_dims(state, 0)
+        np.save(path + ".npy", state)
+        self.compiles = False
         self.env = gym_gvgai.make('gvgai-{}-lvl0-v0'.format(self.name))

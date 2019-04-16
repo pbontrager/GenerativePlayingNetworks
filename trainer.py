@@ -111,18 +111,18 @@ class Trainer(object):
 
         loss = 0
         for update in range(self.version + 1, self.version + updates + 1):
-            if(self.version == 0):
-                self.agent.set_envs() #Pretrain on existing levels
-                self.agent.train_agent(7*rl_steps)
-            else:
-                self.new_levels(batch_size)
-                self.agent.set_envs(self.temp_dir.name)
+            #if(self.version == 0):
+            #    self.agent.set_envs() #Pretrain on existing levels
+            #    self.agent.train_agent(7*rl_steps)
+            #else:
+            self.new_levels(batch_size)
+            self.agent.set_envs(self.temp_dir.name)
 
             self.unfreeze_weights(self.agent.actor_critic.base)
             self.agent.train_agent(rl_steps)
             self.freeze_weights(self.agent.actor_critic.base)
 
-            for i in range(100):
+            for i in range(1):
                 self.gen_optimizer.zero_grad()
                 levels = self.generator(z())
                 states = self.generator.adapter(levels)
