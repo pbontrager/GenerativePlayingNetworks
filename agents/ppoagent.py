@@ -23,7 +23,6 @@ from a2c_ppo_acktr.storage import RolloutStorage
 from game.wrappers import make_vec_envs, GridGame
 from models.policy import Policy
 
-#import pdb; pdb.set_trace()
 import pdb
 #Use inheritance to add a2c and acktr agents
 class PPOAgent:
@@ -48,7 +47,6 @@ class PPOAgent:
     ppo_epoch = 4
     num_mini_batch = 4
     log_interval = 1 #log per n updates
-    save_dir = './trained_models/'
     log_dir = os.path.expanduser('/tmp/gym')
     eval_log_dir = log_dir + "_eval"
     save_interval = 100
@@ -64,11 +62,12 @@ class PPOAgent:
     gail_batch_size = 128
     gail_epoch = 5
 
-    def __init__(self, env_def, processes=1, version=0, lr=2.5e-4):
+    def __init__(self, env_def, processes=1, dir='.', version=0, lr=2.5e-4):
         self.env_def = env_def
         self.num_processes = processes #cpu processes
         self.lr = lr
         self.version = version
+        self.save_dir = dir + '/trained_models/'
 
         #Setup
         pathlib.Path(self.save_dir).mkdir(parents=True, exist_ok=True)

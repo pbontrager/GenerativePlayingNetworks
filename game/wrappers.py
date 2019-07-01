@@ -3,6 +3,7 @@
 Wrappers for VGDL Games
 """
 import os
+import csv
 import random
 import numpy as np
 
@@ -74,12 +75,14 @@ class GridGame(gym.Wrapper):
         self.id = id
         self.name = game
         self.levels = path
+        self.level_id = 0
         self.env = gym_gvgai.make('gvgai-{}-lvl0-v1'.format(game))
         gym.Wrapper.__init__(self, self.env)
 
         self.compiles = True
         self.state = None
         self.steps = 0
+        self.score = 0
         self.play_length = play_length
         self.shape = shape
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=shape, dtype=np.float32)
@@ -92,37 +95,52 @@ class GridGame(gym.Wrapper):
     def step(self, action):
         action = action.item()
         if(not self.compiles):
-           return self.state, -10, True, {}
-        _, _, done, info = self.env.step(action)
+           return self.state, -3, True, {}
+        _, r, done, info = self.env.step(action)
         if(self.steps >= self.play_length):
             done = True
-        reward = self.get_reward(done, info["winner"] )
+        reward = self.get_reward(done, info["winner"], r) #extra r parameter
         state = self.get_state(info['grid'])
         self.steps += 1
+        self.score += reward
         return state, reward, done, {}
 
-    # def get_reward(self, isOver, winner):
-    #     if(isOver):
-    #         if(winner == 'PLAYER_WINS'):
-    #             return 1
-    #         else:
-    #             return -1
-    #     else:
-    #         return -1/self.play_length
+    def get_reward(self, isOver, winner, s):
+         reward = 0
+         if(isOver):
+             if(winner == 'PLAYER_WINS'):
+                 reward = 2 - self.steps/self.play_length
+             else:
+                 reward =  -2 + self.steps/self.play_length
+             self.log_reward(self.score + reward)
+         elif(s > 0):
+             reward = 1/20 #self.play_length
+         return reward
 
     #def get_reward(self, isOver, winner):
     #    if(isOver):
     #        if(winner == 'PLAYER_WINS'):
-    #            return  1.1 - self.steps/self.play_length
+    #            reward = 2 - self.steps/self.play_length
     #        else:
-    #            return -1.1 + self.steps/self.play_length
+    #            reward = -2 + self.steps/self.play_length
+    #        self.log_reward(reward)
+    #        return reward
     #    else:
     #        return 0
 
-    def get_reward(self, isOver, winner):
-        if(isOver):
-            return 0
-        return 1/self.play_length
+    #def get_reward(self, isOver, winner, reward):
+    #    if(isOver):
+    #        if(winner == 'PLAYER_WINS'):
+    #            return 1
+    #        else:
+    #            return -1
+    #    else:
+    #        if(reward > 0):
+    #            return 1/100 #self.play_length
+    #        elif(reward < 0):
+    #            return -1/100 #self.play_length
+    #        else:
+    #            return 0
 
     def get_state(self, grid):
         state = self.pad(grid)
@@ -131,12 +149,15 @@ class GridGame(gym.Wrapper):
         return state
 
     def set_level(self):
-        if(self.levels):
+        if(self.levels and random.randint(1,5) < 5):
             level_names = [file for file in os.listdir(self.levels) if file.endswith('.txt')]
             selection = random.randint(0, len(level_names) - 1)
+            self.level_id = selection
             path = os.path.join(self.levels, level_names[selection][:-4])
             state = np.load(path + ".npy")
-            if(len(state.shape) == 4):
+            with open(path + ".txt", 'r') as f:
+                state_str = f.read()
+            if(os.path.isfile(path + ".no_compile")):
                 self.compiles = False
                 self.state = state
                 return state
@@ -146,15 +167,12 @@ class GridGame(gym.Wrapper):
                 self.compiles = True
             except Exception as e:
                 #print(e)
-                self.restart(e, path, state)
-            except timeout_decorator.TimeoutError:
-                #print("Timeout")
-                pdb.set_trace()
-                self.restart("Timeout", path, state)
+                self.restart(e, path)
             except SystemExit:
                 #print("SystemExit")
-                self.restart("SystemExit", path, state)
+                self.restart("SystemExit", path)
         else:
+            self.level_id = -1
             lvl = random.randint(0,4)
             self.env.unwrapped._setLevel(lvl)
             self.env.reset()
@@ -164,10 +182,21 @@ class GridGame(gym.Wrapper):
         return state
 
     def log(self, text):
-        with open("log_{}.txt".format(self.id), 'a+') as log:
+        path = os.path.join(self.levels, "log_{}.txt".format(self.id))
+        with open('log_{}.txt'.format(self.id), 'a+') as log:
             log.write(str(text) + "\n")
 
-    @timeout_decorator.timeout(1)
+    def log_reward(self, reward):
+        if(self.level_id >= 0):
+            path = os.path.join(self.levels, 'rewards_{}.csv'.format(self.id))
+            add_header = not  os.path.exists(path)
+            with open(path, 'a+') as rewards:
+                writer = csv.writer(rewards)
+                if(add_header):
+                    writer.writerow(['level', 'reward'])
+                writer.writerow((self.level_id, reward))
+
+    #@timeout_decorator.timeout(1, use_signals=False)
     def test_level(self):
         self.env.reset()
         self.env.step(0)
@@ -186,9 +215,8 @@ class GridGame(gym.Wrapper):
         background = np.expand_dims(background, 0)
         return np.concatenate([state, background])
 
-    def restart(self, e, path, state):
-        self.log(e)
-        state = np.expand_dims(state, 0)
-        np.save(path + ".npy", state)
+    def restart(self, e, path):
+        #self.log(e)
+        open(path + ".no_compile", 'w').close()
         self.compiles = False
         self.env = gym_gvgai.make('gvgai-{}-lvl0-v0'.format(self.name))

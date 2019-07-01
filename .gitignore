@@ -4,7 +4,7 @@ pytorch-*
 baselines
 
 #Data
-experiments/*
+experiment*/
 trained_models/*
 log*
 
