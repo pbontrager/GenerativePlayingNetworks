@@ -6,9 +6,11 @@ baselines
 #Data
 experiment*/
 trained_models/*
+runs/*
 log*
 
 #Compile stuff
 __pycache__
 .ipynb_checkpoints
 .DS_Store
+*.swp

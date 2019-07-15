@@ -22,6 +22,9 @@ from a2c_ppo_acktr.storage import RolloutStorage
 
 from game.wrappers import make_vec_envs, GridGame
 from models.policy import Policy
+from models.reconstruction import Decoder
+
+from tensorboardX import SummaryWriter
 
 import pdb
 #Use inheritance to add a2c and acktr agents
@@ -33,7 +36,12 @@ class PPOAgent:
     entropy_coef = 0.01
     value_loss_coef = 0.5
     max_grad_norm = 0.5 #max norm of gradients
+
+    #ppo hyperparameters
     clip_param = 0.1 #ppo clip
+    num_steps = 128  #steps before an update
+    ppo_epoch = 4
+    num_mini_batch = 4
 
     seed = 1
     device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
@@ -42,10 +50,7 @@ class PPOAgent:
     use_proper_time_limits = False
     use_linear_lr_decay = True
 
-    #experiment setup
-    num_steps = 128 #steps before an update
-    ppo_epoch = 4
-    num_mini_batch = 4
+    #experimnent setup
     log_interval = 1 #log per n updates
     log_dir = os.path.expanduser('/tmp/gym')
     eval_log_dir = log_dir + "_eval"
@@ -74,6 +79,9 @@ class PPOAgent:
         if(self.num_mini_batch > processes):
             self.num_mini_batch = processes
 
+        self.writer = SummaryWriter()
+        self.total_steps = 0
+
         #State
         torch.manual_seed(self.seed)
         torch.cuda.manual_seed_all(self.seed)
@@ -100,6 +108,16 @@ class PPOAgent:
                 base_kwargs={'recurrent': self.recurrent_policy,
                              'shapes': list(reversed(self.env_def.model_shape))})
         self.actor_critic.to(self.device)
+
+        #Reconstruction
+        self.reconstruct = False
+        if(self.reconstruct):
+            print("Move reconstruction to it's own class")
+            layers = self.envs.observation_space.shape[0]
+            shapes = list(self.env_def.model_shape)
+            self.r_model = Decoder(layers, shapes=shapes).to(self.device)
+            self.r_loss = nn.MSELoss() #Or nn.CrossEntropyLoss() where target is argmax
+            self.r_optimizer = optim.Adam(self.r_model.parameters(), lr = .0001)
 
         if self.algo == 'a2c':
             self.agent = algo.A2C_ACKTR(
@@ -155,7 +173,7 @@ class PPOAgent:
 
     def save(self, path, version):
         ob_rms = getattr(utils.get_vec_normalize(self.envs), 'ob_rms', None)
-        torch.save([self.actor_critic, ob_rms], 
+        torch.save([self.actor_critic, ob_rms],
             os.path.join(path, "agent_{}.tar".format(version)))
 
     def report(self, version, total_num_steps, FPS, rewards):
@@ -178,6 +196,37 @@ class PPOAgent:
                 self.envs.close()
             self.level_path = level_path
             self.envs = make_vec_envs(self.env_def, level_path, self.seed, self.num_processes, self.gamma, self.log_dir, self.device, True)
+
+    def update_reconstruction(self, rollouts):
+        #Mask frames that are not relevant
+        mask = rollouts.masks.unfold(0, 2, 1).min(-1)[0]
+        mask = mask.view(-1)
+        mask = torch.nonzero(mask).squeeze()
+
+        #Image Pairs
+        l, w, h = list(rollouts.obs.size())[2:]
+        img_pairs = rollouts.obs.unfold(0, 2, 1) #128, 8, 14, 12, 16, 2
+        img_pairs = img_pairs.view(-1, l, w, h, 2)
+        img_pairs = img_pairs[mask]
+        x = img_pairs[:, :, :, :, 0]
+        y = img_pairs[:, :, :, :, 1]
+
+        #Input hidden states
+        hidden_size = rollouts.recurrent_hidden_states.size(2)
+        hidden = rollouts.recurrent_hidden_states[:-1].view(-1, hidden_size) #129, 8, 512
+        hidden = hidden[mask]
+
+        #Update model
+        print("Apply minibatching")
+        self.r_optimizer.zero_grad()
+        mask = torch.ones_like(mask).float().unsqueeze(1)
+        _, predictions, _ = self.actor_critic.base(x, hidden, mask)
+        reconstructions = self.r_model(predictions)
+        loss = .05*self.r_loss(reconstructions, y)        #model -> x or x and a? x already contains action features
+        loss.backward()
+        self.r_optimizer.step()
+        print(loss.item()) #add loss weight
+        return loss
 
     def play(self, env, runs=1, visual=False):
         env = GridGame()
@@ -285,8 +334,17 @@ class PPOAgent:
                                      self.gae_lambda, self.use_proper_time_limits)
 
             value_loss, action_loss, dist_entropy = self.agent.update(self.rollouts)
+            if(self.reconstruct):
+                self.update_reconstruction(self.rollouts)
 
             self.rollouts.after_update()
+
+            #Tensorboard Reporting
+            self.total_steps += self.num_processes*self.num_steps
+            self.writer.add_scalar('Mean Reward', np.mean(episode_rewards), self.total_steps)
+            self.writer.add_scalar('Action Loss', action_loss, self.total_steps)
+            self.writer.add_scalar('Value Loss', value_loss, self.total_steps)
+            self.writer.add_scalar('Distribution Entropy', dist_entropy, self.total_steps)
 
             # save for every interval-th episode or for the last epoch
             total_num_steps = (j + 1) * self.num_processes * self.num_steps

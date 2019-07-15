@@ -12,13 +12,12 @@ def main(game_name, game_length):
 	latent_shape = (100,)
 	gen = Generator(latent_shape, env)
 
-        #Origen: Verify l1 loss value
         #Here: verify agents reward going the right way
 	#Run without generator to see training
         #Focus on doing better than random initialization (maybe don't update generator)
 
 	#Agent
-	num_processes = 8
+	num_processes = 16
 	experiment = "experiment4"
 	agent = PPOAgent(env, num_processes, experiment)
 

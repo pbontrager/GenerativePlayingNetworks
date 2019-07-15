@@ -89,6 +89,7 @@ class GridGame(gym.Wrapper):
 
     def reset(self):
         self.steps = 0
+        self.score = 0
         state = self.set_level()
         return state
 
@@ -105,17 +106,22 @@ class GridGame(gym.Wrapper):
         self.score += reward
         return state, reward, done, {}
 
-    def get_reward(self, isOver, winner, s):
-         reward = 0
-         if(isOver):
-             if(winner == 'PLAYER_WINS'):
-                 reward = 2 - self.steps/self.play_length
-             else:
-                 reward =  -2 + self.steps/self.play_length
-             self.log_reward(self.score + reward)
-         elif(s > 0):
-             reward = 1/20 #self.play_length
-         return reward
+    def get_reward(self, isOver, winner, r):
+        if(isOver and winner=='PLAYER_WINS'):
+            return 10
+        return r
+
+    #def get_reward(self, isOver, winner, r):
+    #     reward = 0
+    #     if(isOver):
+    #         if(winner == 'PLAYER_WINS'):
+    #             reward = 100 - self.steps/self.play_length
+    #         else:
+    #             reward =  -2 + self.steps/self.play_length
+    #         self.log_reward(self.score + reward)
+    #     elif(r > 0):
+    #         reward = 1 #self.play_length
+    #     return reward
 
     #def get_reward(self, isOver, winner):
     #    if(isOver):
@@ -131,9 +137,9 @@ class GridGame(gym.Wrapper):
     #def get_reward(self, isOver, winner, reward):
     #    if(isOver):
     #        if(winner == 'PLAYER_WINS'):
-    #            return 1
+    #            reward = 1
     #        else:
-    #            return -1
+    #            reward = -1
     #    else:
     #        if(reward > 0):
     #            return 1/100 #self.play_length
@@ -172,7 +178,7 @@ class GridGame(gym.Wrapper):
                 #print("SystemExit")
                 self.restart("SystemExit", path)
         else:
-            self.level_id = -1
+            self.level_id = -1             #So log_reward doesn't track the validity of this level
             lvl = random.randint(0,4)
             self.env.unwrapped._setLevel(lvl)
             self.env.reset()

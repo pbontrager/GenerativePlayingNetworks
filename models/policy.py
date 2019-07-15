@@ -170,15 +170,36 @@ class NNBase(nn.Module):
 
         return x, hxs
 
-
 class CNNBase(NNBase):
+    def __init__(self, num_inputs, shapes=[], recurrent=False, hidden_size=512):
+        super(CNNBase, self).__init__(recurrent, hidden_size, hidden_size)
+
+        self.main = nn.Sequential(
+             nn.Conv2d(num_inputs, 128, 3, padding=(3,1), stride=1), nn.ReLU(),
+             nn.Conv2d(128, 64, 3, padding=1, stride=2), nn.ReLU(),
+             nn.Conv2d(64, 32, 3, padding=1, stride=2), nn.ReLU(), Flatten(),
+             nn.Linear(32*4*4, hidden_size), nn.ReLU())
+
+        self.critic_linear = nn.Linear(hidden_size, 1)
+        self.train()
+
+    def forward(self, inputs, rnn_hxs, masks):
+        x = self.main(inputs)
+
+        if self.is_recurrent:
+            x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+
+        return self.critic_linear(x), x, rnn_hxs
+
+
+#Standard
+class CNNBaseStandard(NNBase):
     def __init__(self, num_inputs, shapes=[], recurrent=False, hidden_size=512):
         super(CNNBase, self).__init__(recurrent, hidden_size, hidden_size)
 
         init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
                                constant_(x, 0), nn.init.calculate_gain('relu'))
 
-        #[(3, 4),(6, 8),(12, 16),(12, 32)]
         self.blocks = nn.ModuleList()
         in_ch = num_inputs
         out_ch = 32
@@ -216,7 +237,7 @@ class CNNBase(NNBase):
         x = inputs
         for b in self.blocks:
             x = b(x)
-            
+
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
 
