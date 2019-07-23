@@ -24,7 +24,7 @@ class Policy(nn.Module):
             base_kwargs = {}
         if base is None:
             if len(obs_shape) == 3:
-                base = CNNBase
+                base = CNNDeep
             elif len(obs_shape) == 1:
                 base = MLPBase
             else:
@@ -191,57 +191,105 @@ class CNNBase(NNBase):
 
         return self.critic_linear(x), x, rnn_hxs
 
+class ResidualBlock(nn.Module):
+    def __init__(self, inputs, channels):
+        super(ResidualBlock, self).__init__()
 
-#Standard
-class CNNBaseStandard(NNBase):
+        self.block = nn.Sequential(
+            nn.Conv2d(inputs, channels, 3, padding=1, stride=1),
+            nn.ReLU(),
+            nn.Conv2d(channels, inputs, 3, padding=1, stride=1),
+            nn.ReLU())
+
+    def forward(self, x):
+        return x + self.block(x)
+
+class CNNDeep(NNBase):
     def __init__(self, num_inputs, shapes=[], recurrent=False, hidden_size=512):
-        super(CNNBase, self).__init__(recurrent, hidden_size, hidden_size)
+        super(CNNDeep, self).__init__(recurrent, hidden_size, hidden_size)
 
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-                               constant_(x, 0), nn.init.calculate_gain('relu'))
+        self.block1 = nn.Sequential(
+             nn.Conv2d(num_inputs, 16, 3, padding=(3,1), stride=1), nn.ReLU(),
+             nn.MaxPool2d(3, padding=1, stride=1), nn.ReLU(),
+             ResidualBlock(16, 16))
 
-        self.blocks = nn.ModuleList()
-        in_ch = num_inputs
-        out_ch = 32
-        halfway = math.ceil(len(shapes)/2)
-        for i, s in enumerate(shapes):
-            block = nn.Sequential(
-                utils.Resize(s),
-                init_(nn.Conv2d(in_ch, out_ch, 3, padding=1)),
-                nn.ReLU())
-            in_ch = out_ch
-            if(i+1 == halfway and len(shapes)%2==0):
-                out_ch = in_ch
-            elif(i+1 < halfway):
-                out_ch = in_ch*2
-            else:
-                out_ch = in_ch//2
-            self.blocks.append(block)
-        block = nn.Sequential(Flatten(), init_(nn.Linear(in_ch * reduce(mul, shapes[-1]), hidden_size)), nn.ReLU())
-        self.blocks.append(block)
+        self.block2 = nn.Sequential(
+             nn.Conv2d(16, 32, 3, padding=1, stride=1), nn.ReLU(),
+             nn.MaxPool2d(3, padding=1, stride=2), nn.ReLU(),
+             ResidualBlock(32, 32))
 
-        # self.main = nn.Sequential(
-        #     init_(nn.Conv2d(num_inputs, 32, 8, stride=4)), nn.ReLU(),
-        #     init_(nn.Conv2d(32, 64, 4, stride=2)), nn.ReLU(),
-        #     init_(nn.Conv2d(64, 32, 3, stride=1)), nn.ReLU(), Flatten(),
-        #     init_(nn.Linear(32 * 7 * 7, hidden_size)), nn.ReLU())
+        self.block3 = nn.Sequential(
+             nn.Conv2d(32, 32, 3, padding=1, stride=1), nn.ReLU(),
+             nn.MaxPool2d(3, padding=1, stride=2), nn.ReLU(),
+             ResidualBlock(32, 32))
 
-        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
-                               constant_(x, 0))
+        self.flat = nn.Sequential(Flatten(),
+             nn.Linear(32*4*4, hidden_size),
+             nn.ReLU())
 
-        self.critic_linear = init_(nn.Linear(hidden_size, 1))
-
+        self.critic_linear = nn.Linear(hidden_size, 1)
         self.train()
 
     def forward(self, inputs, rnn_hxs, masks):
-        x = inputs
-        for b in self.blocks:
-            x = b(x)
+        x = self.block1(inputs)
+        x = self.block2(x)
+        x = self.block3(x)
+        x = self.flat(x)
 
         if self.is_recurrent:
             x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
 
         return self.critic_linear(x), x, rnn_hxs
+
+#class CNNBase(NNBase):
+    #def __init__(self, num_inputs, shapes=[], recurrent=False, hidden_size=512):
+    #    super(CNNBase, self).__init__(recurrent, hidden_size, hidden_size)
+    #
+    #    init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
+    #                           constant_(x, 0), nn.init.calculate_gain('relu'))
+    #
+    #    self.blocks = nn.ModuleList()
+    #    in_ch = num_inputs
+    #    out_ch = 32
+    #    halfway = math.ceil(len(shapes)/2)
+    #    for i, s in enumerate(shapes):
+    #        block = nn.Sequential(
+    #            utils.Resize(s),
+    #            init_(nn.Conv2d(in_ch, out_ch, 3, padding=1)),
+    #            nn.ReLU())
+    #        in_ch = out_ch
+    #        if(i+1 == halfway and len(shapes)%2==0):
+    #            out_ch = in_ch
+    #        elif(i+1 < halfway):
+    #            out_ch = in_ch*2
+    #        else:
+    #            out_ch = in_ch//2
+    #        self.blocks.append(block)
+    #    block = nn.Sequential(Flatten(), init_(nn.Linear(in_ch * reduce(mul, shapes[-1]), hidden_size)), nn.ReLU())
+    #    self.blocks.append(block)
+    #
+    #    # self.main = nn.Sequential(
+    #    #     init_(nn.Conv2d(num_inputs, 32, 8, stride=4)), nn.ReLU(),
+    #    #     init_(nn.Conv2d(32, 64, 4, stride=2)), nn.ReLU(),
+    #    #     init_(nn.Conv2d(64, 32, 3, stride=1)), nn.ReLU(), Flatten(),
+    #    #     init_(nn.Linear(32 * 7 * 7, hidden_size)), nn.ReLU())
+    #
+    #    init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.
+    #                           constant_(x, 0))
+    #
+    #    self.critic_linear = init_(nn.Linear(hidden_size, 1))
+    #
+    #    self.train()
+
+    #def forward(self, inputs, rnn_hxs, masks):
+    #     x = inputs
+    #     for b in self.blocks:
+    #         x = b(x)
+    #
+    #     if self.is_recurrent:
+    #         x, rnn_hxs = self._forward_gru(x, rnn_hxs, masks)
+    #
+    #     return self.critic_linear(x), x, rnn_hxs
 
 
 class MLPBase(NNBase):

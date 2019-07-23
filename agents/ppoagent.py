@@ -30,21 +30,21 @@ import pdb
 #Use inheritance to add a2c and acktr agents
 class PPOAgent:
     #algorithm
-    algo = 'ppo' #a2c, ppo, acktr
-    use_gae = True #generalized advantage estimation
+    algo = 'ppo'          #a2c, ppo, acktr
+    use_gae = False       #generalized advantage estimation
     gae_lambda = 0.95
-    entropy_coef = 0.01
-    value_loss_coef = 0.5
-    max_grad_norm = 0.5 #max norm of gradients
+    entropy_coef = 0.01   #weight maximizing action entropy loss
+    value_loss_coef = 0.5 #weight value function loss
+    max_grad_norm = 0.5   #max norm of gradients
 
     #ppo hyperparameters
-    clip_param = 0.1 #ppo clip
-    num_steps = 128  #steps before an update
+    clip_param = 0.1      #ppo clip
+    num_steps = 128       #steps before an update
     ppo_epoch = 4
     num_mini_batch = 4
 
     seed = 1
-    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
     cuda_deterministic = False
     no_cuda = False
     use_proper_time_limits = False
@@ -58,10 +58,10 @@ class PPOAgent:
     eval_interval = None
     recurrent_policy = True
 
-    #optimization, RMSprop
-    eps = 1e-5 #epsilon
+    #optimization, RMSprop and TD
+    eps = 1e-5    #epsilon
     alpha = 0.99
-    gamma = 0.99
+    gamma = 0.99  #discount factor
 
     #imitation learning with gail
     gail_batch_size = 128

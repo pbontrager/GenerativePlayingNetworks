@@ -17,8 +17,8 @@ def main(game_name, game_length):
         #Focus on doing better than random initialization (maybe don't update generator)
 
 	#Agent
-	num_processes = 16
-	experiment = "experiment4"
+	num_processes = 24
+	experiment = "experiment_expected_win"
 	agent = PPOAgent(env, num_processes, experiment)
 
 	#Training
@@ -27,4 +27,4 @@ def main(game_name, game_length):
 	#t.train(10e6, 8192, 32) #10m training steps, in batches of 8192 steps per 32 levels
 
 if(__name__ == "__main__"):
-	main('zelda', 2000)
+	main('zelda', 1000)
