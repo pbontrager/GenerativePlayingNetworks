@@ -160,7 +160,7 @@ class Trainer(object):
         z = self.z_generator(batch_size, self.generator.z_size)
 
         self.agent.set_envs() #Pretrain on existing levels
-        self.agent.train_agent(8*rl_steps) #7 or 24
+        self.agent.train_agent(3000*rl_steps) #8 or 24
 
         loss = 0
         for update in range(self.version + 1, self.version + updates + 1):
@@ -168,11 +168,11 @@ class Trainer(object):
                 self.agent.set_envs() #Pretrain on existing levels
             self.agent.train_agent(4*rl_steps) #7 or 24
             #else:
-            #self.new_elite_levels(128) #batch_size)
-            #self.agent.set_envs(self.temp_dir.name)
-            self.unfreeze_weights(self.agent.actor_critic.base)
-            self.agent.train_agent(rl_steps)
-            self.freeze_weights(self.agent.actor_critic.base)
+                #self.new_elite_levels(128) #batch_size)
+                #self.agent.set_envs(self.temp_dir.name)
+                ##self.unfreeze_weights(self.agent.actor_critic.base)
+                #self.agent.train_agent(rl_steps)
+                ##self.freeze_weights(self.agent.actor_critic.base)
 
             #Not updating, range = 0
             for i in range(1):

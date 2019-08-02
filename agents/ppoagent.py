@@ -17,8 +17,9 @@ import torch.optim as optim
 from a2c_ppo_acktr import algo, utils
 from a2c_ppo_acktr.algo import gail
 from a2c_ppo_acktr.arguments import get_args
-from a2c_ppo_acktr.storage import RolloutStorage
-#from a2c_ppo_acktr.evaluation import evaluate
+#from a2c_ppo_acktr.storage import RolloutStorage
+from agents.storage import RolloutStorage
+from agents.a2c import A2C_ACKTR
 
 from game.wrappers import make_vec_envs, GridGame
 from models.policy import Policy
@@ -30,11 +31,11 @@ import pdb
 #Use inheritance to add a2c and acktr agents
 class PPOAgent:
     #algorithm
-    algo = 'ppo'          #a2c, ppo, acktr
+    algo = 'a2c'          #a2c, ppo, acktr
     use_gae = False       #generalized advantage estimation
     gae_lambda = 0.95
     entropy_coef = 0.01   #weight maximizing action entropy loss
-    value_loss_coef = 0.5 #weight value function loss
+    value_loss_coef = 1 #0.5 #weight value function loss
     max_grad_norm = 0.5   #max norm of gradients
 
     #ppo hyperparameters
@@ -48,7 +49,7 @@ class PPOAgent:
     cuda_deterministic = False
     no_cuda = False
     use_proper_time_limits = False
-    use_linear_lr_decay = True
+    use_linear_lr_decay = False
 
     #experimnent setup
     log_interval = 1 #log per n updates
@@ -120,7 +121,7 @@ class PPOAgent:
             self.r_optimizer = optim.Adam(self.r_model.parameters(), lr = .0001)
 
         if self.algo == 'a2c':
-            self.agent = algo.A2C_ACKTR(
+            self.agent = A2C_ACKTR(
                 self.actor_critic,
                 self.value_loss_coef,
                 self.entropy_coef,
@@ -274,7 +275,9 @@ class PPOAgent:
         self.rollouts.obs[0].copy_(obs)
         self.rollouts.to(self.device)
 
-        episode_rewards = deque(maxlen=10)
+        episode_rewards = deque(maxlen=30) #10
+        episode_values = deque(maxlen=30)
+        first_steps = [True for i in range(self.num_processes)]
 
         start = time.time()
         num_updates = int(num_env_steps) // self.num_steps // self.num_processes
@@ -289,12 +292,18 @@ class PPOAgent:
             for step in range(self.num_steps):
                 # Sample actions
                 with torch.no_grad():
-                    value, action, action_log_prob, recurrent_hidden_states = self.actor_critic.act(
-                        self.rollouts.obs[step], self.rollouts.recurrent_hidden_states[step],
-                        self.rollouts.masks[step])
+                    value, Q, action, action_prob, action_log_prob, recurrent_hidden_states = \
+                        self.actor_critic.act(self.rollouts.obs[step],
+                            self.rollouts.recurrent_hidden_states[step],
+                            self.rollouts.masks[step])
 
                 # Obser reward and next obs
                 obs, reward, done, infos = self.envs.step(action)
+
+                for i, step in enumerate(first_steps):
+                    if step:
+                        episode_values.append(value[i].item())
+                first_steps = done
 
                 for info in infos:
                     if 'episode' in info.keys():
@@ -306,8 +315,8 @@ class PPOAgent:
                 bad_masks = torch.FloatTensor(
                     [[0.0] if 'bad_transition' in info.keys() else [1.0]
                      for info in infos])
-                self.rollouts.insert(obs, recurrent_hidden_states, action,
-                                action_log_prob, value, reward, masks, bad_masks)
+                self.rollouts.insert(obs, recurrent_hidden_states, action, action_prob,
+                                action_log_prob, value, Q, reward, masks, bad_masks)
 
             with torch.no_grad():
                 next_value = self.actor_critic.get_value(
@@ -345,6 +354,8 @@ class PPOAgent:
             self.writer.add_scalar('Action Loss', action_loss, self.total_steps)
             self.writer.add_scalar('Value Loss', value_loss, self.total_steps)
             self.writer.add_scalar('Distribution Entropy', dist_entropy, self.total_steps)
+            self.writer.add_scalar('Win Probability', np.mean(np.array(episode_rewards) > 0), self.total_steps)
+            self.writer.add_scalar('Starting Value', np.mean(episode_values), self.total_steps)
 
             # save for every interval-th episode or for the last epoch
             total_num_steps = (j + 1) * self.num_processes * self.num_steps

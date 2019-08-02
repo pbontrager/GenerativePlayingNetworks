@@ -106,10 +106,15 @@ class GridGame(gym.Wrapper):
         self.score += reward
         return state, reward, done, {}
 
-    def get_reward(self, isOver, winner, r):
-        if(isOver and winner=='PLAYER_WINS'):
-            return 10
-        return r
+    #def get_reward(self, isOver, winner, r):
+    #    if(isOver):
+    #        if(winner=='PLAYER_WINS'):
+    #            return 1
+    #        elif(self.steps >= 990):
+    #            return 0
+    #        else:
+    #            return -1
+    #    return 0
 
     #def get_reward(self, isOver, winner, r):
     #     reward = 0
@@ -123,16 +128,19 @@ class GridGame(gym.Wrapper):
     #         reward = 1 #self.play_length
     #     return reward
 
-    #def get_reward(self, isOver, winner):
-    #    if(isOver):
-    #        if(winner == 'PLAYER_WINS'):
-    #            reward = 2 - self.steps/self.play_length
-    #        else:
-    #            reward = -2 + self.steps/self.play_length
-    #        self.log_reward(reward)
-    #        return reward
-    #    else:
-    #        return 0
+    def get_reward(self, isOver, winner, r):
+        if(isOver):
+            if(winner == 'PLAYER_WINS'):
+                reward = 2 - self.steps/self.play_length
+            else:
+                reward = -2 + self.steps/self.play_length
+            #self.log_reward(reward)
+            return reward
+        else:
+            if(r > 0):
+                return .2
+            else:
+                return 0
 
     #def get_reward(self, isOver, winner, reward):
     #    if(isOver):
@@ -179,7 +187,7 @@ class GridGame(gym.Wrapper):
                 self.restart("SystemExit", path)
         else:
             self.level_id = -1             #So log_reward doesn't track the validity of this level
-            lvl = random.randint(0,4)
+            lvl = 0 #random.randint(0,4)
             self.env.unwrapped._setLevel(lvl)
             self.env.reset()
             _, _, _, info = self.env.step(0)

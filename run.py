@@ -18,8 +18,8 @@ def main(game_name, game_length):
 
 	#Agent
 	num_processes = 24
-	experiment = "experiment_expected_win"
-	agent = PPOAgent(env, num_processes, experiment)
+	experiment = "experiment_expected_rewards_r"
+	agent = PPOAgent(env, num_processes, experiment) #, lr=.001)
 
 	#Training
 	t = Trainer(gen, agent, experiment, 0)

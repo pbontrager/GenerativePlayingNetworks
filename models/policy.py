@@ -65,23 +65,40 @@ class Policy(nn.Module):
         else:
             action = dist.sample()
 
-        action_log_probs = dist.log_probs(action)
+        if(value.size(-1) > 1):
+            Q = value.gather(1, action)
+            value = (dist.probs*value).sum(1).unsqueeze(1)
+        else:
+            Q = value
+
+        action_prob = dist.probs.gather(1, action)
+        action_log_prob = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
-        return value, action, action_log_probs, rnn_hxs
+        return value, Q, action, action_prob, action_log_prob, rnn_hxs
 
     def get_value(self, inputs, rnn_hxs, masks):
-        value, _, _ = self.base(inputs, rnn_hxs, masks)
+        value, actor_features, _ = self.base(inputs, rnn_hxs, masks)
+        if(value.size(-1) > 1):
+            dist = self.dist(actor_features)
+            value = (dist.probs*value).sum(1).unsqueeze(1)
         return value
 
     def evaluate_actions(self, inputs, rnn_hxs, masks, action):
         value, actor_features, rnn_hxs = self.base(inputs, rnn_hxs, masks)
         dist = self.dist(actor_features)
 
-        action_log_probs = dist.log_probs(action)
+        if(value.size(-1) > 1):
+            Q = value.gather(1, action)
+            value = (dist.probs*value).sum(1).unsqueeze(1).detach()
+        else:
+            Q = value
+
+        action_prob = dist.probs.gather(1, action)
+        action_log_prob = dist.log_probs(action)
         dist_entropy = dist.entropy().mean()
 
-        return value, action_log_probs, dist_entropy, rnn_hxs
+        return value, Q, action_prob, action_log_prob, dist_entropy, rnn_hxs
 
 
 class NNBase(nn.Module):
@@ -227,7 +244,7 @@ class CNNDeep(NNBase):
              nn.Linear(32*4*4, hidden_size),
              nn.ReLU())
 
-        self.critic_linear = nn.Linear(hidden_size, 1)
+        self.critic_linear = nn.Linear(hidden_size, 6)
         self.train()
 
     def forward(self, inputs, rnn_hxs, masks):
