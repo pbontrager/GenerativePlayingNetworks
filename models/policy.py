@@ -90,7 +90,7 @@ class Policy(nn.Module):
 
         if(value.size(-1) > 1):
             Q = value.gather(1, action)
-            value = (dist.probs*value).sum(1).unsqueeze(1).detach()
+            value = (dist.probs*value).sum(1).unsqueeze(1)
         else:
             Q = value
 

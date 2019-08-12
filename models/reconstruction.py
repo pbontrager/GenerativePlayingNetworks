@@ -49,7 +49,6 @@ class Decoder(nn.Module):
 
     def forward(self, x):
         #pdb.set_trace()
-        print("PDB check the output of this network")
         x = self.features(x)
         x = x.view(-1, *self.initial_shape)
         for b in self.blocks:

@@ -20,6 +20,7 @@ from a2c_ppo_acktr.arguments import get_args
 #from a2c_ppo_acktr.storage import RolloutStorage
 from agents.storage import RolloutStorage
 from agents.a2c import A2C_ACKTR
+from agents.ppo import PPO
 
 from game.wrappers import make_vec_envs, GridGame
 from models.policy import Policy
@@ -111,7 +112,7 @@ class PPOAgent:
         self.actor_critic.to(self.device)
 
         #Reconstruction
-        self.reconstruct = False
+        self.reconstruct = True
         if(self.reconstruct):
             print("Move reconstruction to it's own class")
             layers = self.envs.observation_space.shape[0]
@@ -130,7 +131,7 @@ class PPOAgent:
                 alpha=self.alpha,
                 max_grad_norm=self.max_grad_norm)
         elif self.algo == 'ppo':
-            self.agent = algo.PPO(
+            self.agent = PPO(
                 self.actor_critic,
                 self.clip_param,
                 self.ppo_epoch,
@@ -139,7 +140,8 @@ class PPOAgent:
                 self.entropy_coef,
                 lr=self.lr,
                 eps=self.eps,
-                max_grad_norm=self.max_grad_norm)
+                max_grad_norm=self.max_grad_norm,
+                use_clipped_value_loss=False)
         elif self.algo == 'acktr':
             self.agent = algo.A2C_ACKTR(
                 self.actor_critic, self.value_loss_coef, self.entropy_coef, acktr=True)
@@ -169,7 +171,7 @@ class PPOAgent:
     def load(self, path, version):
         policy, ob_rms = torch.load(os.path.join(path, "agent_{}.tar".format(version)))
         print("Not using ob_rms: {}".format(ob_rms))
-        utils.get_vec_normalize(self.envs).ob_rms = ob_rms
+        #utils.get_vec_normalize(self.envs).ob_rms = ob_rms
         self.actor_critic = policy
 
     def save(self, path, version):
@@ -211,6 +213,8 @@ class PPOAgent:
         img_pairs = img_pairs[mask]
         x = img_pairs[:, :, :, :, 0]
         y = img_pairs[:, :, :, :, 1]
+        if(x.size() != torch.Size([len(mask), 14, 12, 16])):
+            pdb.set_trace()
 
         #Input hidden states
         hidden_size = rollouts.recurrent_hidden_states.size(2)

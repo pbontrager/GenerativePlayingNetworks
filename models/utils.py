@@ -18,10 +18,10 @@ class LevelAdapter(nn.Module):
         self.shape = shape
         self.mapping = mapping
 
-        self.register_buffer('zero', None)
+        self.zero = None
 
     def set_zero(self, x):
-        self.zero = x.new(x.size(0), 1, x.size(2), x.size(3)).zero_()
+        self.zero = torch.zeros_like(x[:, 0:1, :, :])
 
     def forward(self, x):
         if(self.zero is None or self.zero.size(0) != x.size(0)):

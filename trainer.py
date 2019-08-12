@@ -35,12 +35,12 @@ class Trainer(object):
 
     def load(self, version):
         self.version = version
-        self.agent.load(self.save_paths['agents'], version)
+        self.agent.load(self.save_paths['agent'], version)
 
         path = os.path.join(self.save_paths['models'], "checkpoint_{}.tar".format(version))
-        checkpoint = torch.load(path)
-        self.generator.load_state_dict(checkpoint['generator_model'])
-        self.gen_optimizer.load_state_dict(checkpoint['gen_optimizer'])
+        #checkpoint = torch.load(path)
+        #self.generator.load_state_dict(checkpoint['generator_model'])
+        #self.gen_optimizer.load_state_dict(checkpoint['generator_optimizer'])
 
     def save_models(self, version, g_loss):
         self.agent.save(self.save_paths['agent'], version)
@@ -52,7 +52,7 @@ class Trainer(object):
             }, os.path.join(self.save_paths['models'], "checkpoint_{}.tar".format(version)))
 
     def save_loss(self, update, gen_loss):
-        add_header = not os.path.exists(self.save_paths['loss'])   
+        add_header = not os.path.exists(self.save_paths['loss'])
         with open(self.save_paths['loss'], 'a+') as results:
             writer = csv.writer(results)
             if(add_header):
@@ -144,7 +144,10 @@ class Trainer(object):
     def critic(self, x):
         rnn_hxs = torch.zeros(x.size(0), self.agent.actor_critic.recurrent_hidden_state_size).to(self.device)
         masks = torch.ones(x.size(0), 1).to(self.device)
-        return self.agent.actor_critic.get_value(x, rnn_hxs, masks)
+        actions = torch.zeros_like(masks).long()
+        value, _, _, _, dist_entropy, _ = self.agent.actor_critic.evaluate_actions(x, rnn_hxs, masks, actions)
+        return value, dist_entropy
+        #return self.agent.actor_critic.get_value(x, rnn_hxs, masks)
 
     def eval_levels(self, tensor):
         #raise Exception("Not implemented")
@@ -159,30 +162,33 @@ class Trainer(object):
         self.generator.train()
         z = self.z_generator(batch_size, self.generator.z_size)
 
-        self.agent.set_envs() #Pretrain on existing levels
-        self.agent.train_agent(3000*rl_steps) #8 or 24
+        #self.agent.set_envs() #Pretrain on existing levels
+        #self.agent.train_agent(3000*rl_steps) #8 or 24
 
         loss = 0
+        entropy = 0
         for update in range(self.version + 1, self.version + updates + 1):
             if(self.version == 0):
                 self.agent.set_envs() #Pretrain on existing levels
-            self.agent.train_agent(4*rl_steps) #7 or 24
-            #else:
-                #self.new_elite_levels(128) #batch_size)
-                #self.agent.set_envs(self.temp_dir.name)
-                ##self.unfreeze_weights(self.agent.actor_critic.base)
-                #self.agent.train_agent(rl_steps)
-                ##self.freeze_weights(self.agent.actor_critic.base)
+                self.agent.train_agent(4*rl_steps) #7 or 24
+            elif(self.version > 1):
+                self.new_elite_levels(128) #batch_size)
+                self.agent.set_envs(self.temp_dir.name)
+                #self.unfreeze_weights(self.agent.actor_critic.base)
+                self.agent.train_agent(rl_steps)
+                #self.freeze_weights(self.agent.actor_critic.base)
 
             #Not updating, range = 0
-            for i in range(1):
+            for i in range(20):
                 self.gen_optimizer.zero_grad()
                 levels = self.generator(z())
                 states = self.generator.adapter(levels)
-                expected_value = self.critic(states)
-                target = torch.ones(batch_size).to(self.device) #Get average from new_levels, set target curiculum
+                expected_value, dist = self.critic(states)
+                target = torch.zeros(batch_size).to(self.device) #Get average from new_levels, set target curiculum
+                target_dist = 1.5*torch.ones(batch_size).to(self.device)
                 #Could add penalty for missing symbols
                 gen_loss = F.mse_loss(expected_value, target)
+                gen_loss += F.mse_loss(dist, target_dist)
                 gen_loss.backward()
                 self.gen_optimizer.step()
                 if(gen_loss.item() < .1):
@@ -199,11 +205,13 @@ class Trainer(object):
 
             #Save and report results
             loss += gen_loss.item()
+            entropy += dist.item()
             self.version += 1
             save_frequency = 1
             if(update%save_frequency == 0):
                 self.save_models(update, gen_loss)
                 self.save_loss(update, loss/save_frequency)
-                print('[{}] Gen Loss: {}'.format(update, loss/save_frequency))
+                print('[{}] Gen Loss: {}, Entropy {}'.format(update, loss/save_frequency, entropy/save_frequency))
                 loss = 0
+                entropy = 0
         self.agent.envs.close()

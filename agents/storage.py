@@ -113,6 +113,8 @@ class RolloutStorage(object):
                     action = self.actions[step]
                     mask = self.masks[step + 1] #masks are 1 step off since mask[0] is start
                     wins = self.rewards[step]
+                    if(wins.min().item() < -4):
+                        pdb.set_trace()
                     expected = self.value_preds[step]
                     expected += self.action_probs[step]*(self.returns[step+1] - self.q_preds[step])
                     self.returns[step] = mask*expected + wins #(1-mask)*wins
@@ -182,7 +184,7 @@ class RolloutStorage(object):
                     self.recurrent_hidden_states[0:1, ind])
                 actions_batch.append(self.actions[:, ind])
                 value_preds_batch.append(self.value_preds[:-1, ind])
-                return_batch.append(self.returns[:-1, ind])
+                return_batch.append(self.returns[1:, ind]) #[:-1, ind]
                 masks_batch.append(self.masks[:-1, ind])
                 old_action_log_probs_batch.append(
                     self.action_log_probs[:, ind])

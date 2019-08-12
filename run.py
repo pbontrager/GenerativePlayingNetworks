@@ -18,12 +18,12 @@ def main(game_name, game_length):
 
 	#Agent
 	num_processes = 24
-	experiment = "experiment_expected_rewards_r"
+	experiment = "experiment_gen"
 	agent = PPOAgent(env, num_processes, experiment) #, lr=.001)
 
 	#Training
-	t = Trainer(gen, agent, experiment, 0)
-	t.train(1000, 32, 32768) #1000, 32, 8192
+	t = Trainer(gen, agent, experiment, 1)
+	t.train(1000, 32, 1e6) #1000, 32, 8192
 	#t.train(10e6, 8192, 32) #10m training steps, in batches of 8192 steps per 32 levels
 
 if(__name__ == "__main__"):
