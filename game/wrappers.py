@@ -174,7 +174,7 @@ class GridGame(gym.Wrapper):
             if(os.path.isfile(path + ".no_compile")):
                 self.compiles = False
                 self.state = state
-                self.set_level()
+                return self.set_level()
                 #return state
             try:
                 self.env.unwrapped._setLevel(path + ".txt")
@@ -183,9 +183,11 @@ class GridGame(gym.Wrapper):
             except Exception as e:
                 #print(e)
                 self.restart(e, path)
+                return self.set_level()
             except SystemExit:
                 #print("SystemExit")
                 self.restart("SystemExit", path)
+                return self.set_level()
         else:
             self.compiles = True
             self.level_id = -1             #So log_reward doesn't track the validity of this level
@@ -236,4 +238,3 @@ class GridGame(gym.Wrapper):
         open(path + ".no_compile", 'w').close()
         self.compiles = False
         self.env = gym_gvgai.make('gvgai-{}-lvl0-v0'.format(self.name))
-        self.set_level()
