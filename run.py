@@ -18,7 +18,7 @@ def main(game_name, game_length):
 
 	#Agent
 	num_processes = 24
-	experiment = "experiment_gen"
+	experiment = "experiment_gen_softmax"
 	agent = PPOAgent(env, num_processes, experiment) #, lr=.001)
 
 	#Training

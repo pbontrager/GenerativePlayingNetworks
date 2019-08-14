@@ -184,11 +184,14 @@ class Trainer(object):
                 levels = self.generator(z())
                 states = self.generator.adapter(levels)
                 expected_value, dist = self.critic(states)
-                target = torch.zeros(batch_size).to(self.device) #Get average from new_levels, set target curiculum
+                target = torch.ones_like(expected_value)
+                #target = torch.zeros(batch_size).to(self.device) #Get average from new_levels, set target curiculum
                 target_dist = 1.5*torch.ones(batch_size).to(self.device)
                 #Could add penalty for missing symbols
+                gen_loss = F.binary_cross_entropy_with_logits(expected_value, target)
                 gen_loss = F.mse_loss(expected_value, target)
-                gen_loss += F.mse_loss(dist, target_dist)
+                #gen_loss = F.mse_loss(expected_value, target)
+                #gen_loss += F.mse_loss(dist, target_dist)
                 gen_loss.backward()
                 self.gen_optimizer.step()
                 if(gen_loss.item() < .1):
