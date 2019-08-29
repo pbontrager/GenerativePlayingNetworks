@@ -279,8 +279,10 @@ class PPOAgent:
         self.rollouts.obs[0].copy_(obs)
         self.rollouts.to(self.device)
 
-        episode_rewards = deque(maxlen=30) #10
-        episode_values = deque(maxlen=30)
+        n = 30
+        episode_rewards = deque(maxlen=n)
+        episode_values = deque(maxlen=n)
+        episode_lengths = deque(maxlen=n)
         first_steps = [True for i in range(self.num_processes)]
 
         start = time.time()
@@ -312,6 +314,7 @@ class PPOAgent:
                 for info in infos:
                     if 'episode' in info.keys():
                         episode_rewards.append(info['episode']['r'])
+                        episode_lengths.append(info['episode']['l'])
 
                 # If done then clean the history of observations.
                 masks = torch.FloatTensor(
@@ -355,6 +358,7 @@ class PPOAgent:
             #Tensorboard Reporting
             self.total_steps += self.num_processes*self.num_steps
             self.writer.add_scalar('Mean Reward', np.mean(episode_rewards), self.total_steps)
+            self.writer.add_scalar('Episode Mean Length', np.mean(episode_lengths), self.total_steps)
             self.writer.add_scalar('Action Loss', action_loss, self.total_steps)
             self.writer.add_scalar('Value Loss', value_loss, self.total_steps)
             self.writer.add_scalar('Distribution Entropy', dist_entropy, self.total_steps)
