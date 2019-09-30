@@ -47,15 +47,16 @@ class A2C_ACKTR():
         values = values.view(num_steps, num_processes, 1)
         Qs = Q.view(num_steps, num_processes, 1)
         action_log_probs = action_log_probs.view(num_steps, num_processes, 1)
-        mask = rollouts.masks[:-1]
+        #mask = rollouts.masks[:-1]
+        mask = rollouts.masks[1:]
 
-        #It might already be correct, back to back deaths are 2 0s, what does this mean?
-        if(rollouts.returns.min().item() < -4):
-            pdb.set_trace()
-        advantages = rollouts.returns[1:] - values #returns[:-1]
-        #value_loss = advantages.pow(2).mean()
-        #value_loss = (rollouts.returns[:-1] - action_probs.detach()*Qs).pow(2).mean()
-        value_loss = (mask*(rollouts.returns[1:] - Qs)).pow(2).mean()
+        #Experiment shift
+        #mask, advantages, value_loss
+
+        advantages = rollouts.returns[1:] - values
+        #advantages = mask*(rollouts.returns[:-1] - values)
+        #value_loss = (mask*(rollouts.returns[1:] - Qs)).pow(2).mean()
+        value_loss = ((rollouts.returns[1:] - Qs)).pow(2).mean()
 
         #Use cross-entropy loss?
         action_loss = -(advantages.detach() * action_log_probs).mean()

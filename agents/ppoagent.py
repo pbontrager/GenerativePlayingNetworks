@@ -303,7 +303,7 @@ class PPOAgent:
                             self.rollouts.recurrent_hidden_states[step],
                             self.rollouts.masks[step])
 
-                # Obser reward and next obs
+                # Observe reward and next obs
                 obs, reward, done, infos = self.envs.step(action)
 
                 for i, step in enumerate(first_steps):

@@ -18,13 +18,12 @@ def main(game_name, game_length):
 
 	#Agent
 	num_processes = 24
-	experiment = "experiment_gen_softmax"
+	experiment = "experiment_rl"
 	agent = PPOAgent(env, num_processes, experiment) #, lr=.001)
 
 	#Training
-	t = Trainer(gen, agent, experiment, 1)
-	t.train(1000, 32, 1e6) #1000, 32, 8192
-	#t.train(10e6, 8192, 32) #10m training steps, in batches of 8192 steps per 32 levels
+	t = Trainer(gen, agent, experiment, 0) #1 for pretrained
+	t.train(1000, 512, 1e8) #1000, 32, 8192
 
 if(__name__ == "__main__"):
 	main('zelda', 1000)

@@ -173,7 +173,7 @@ class Trainer(object):
             elif(self.version > 1):
                 self.new_elite_levels(128) #batch_size)
                 self.agent.set_envs(self.temp_dir.name)
-                self.agent.train_agent(1e5) #rl_steps)
+                self.agent.train_agent(rl_steps)
 
             #Not updating, range = 0
             generated_levels = []
@@ -186,7 +186,7 @@ class Trainer(object):
                 levels = self.generator(z())
                 states = self.generator.adapter(levels)
                 expected_value, dist = self.critic(states)
-                target = 2*torch.ones_like(expected_value)
+                target = 1*torch.ones_like(expected_value) + 2*torch.rand_like(expected_value)-1
                 #target = torch.zeros(batch_size).to(self.device) #Get average from new_levels, set target curiculum
                 #target_dist = 1.5*torch.ones(batch_size).to(self.device)
                 #Could add penalty for missing symbols
