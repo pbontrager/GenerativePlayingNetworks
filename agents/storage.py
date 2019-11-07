@@ -14,8 +14,8 @@ class RolloutStorage(object):
         self.recurrent_hidden_states = torch.zeros(
             num_steps + 1, num_processes, recurrent_hidden_state_size)
         self.rewards = torch.zeros(num_steps, num_processes, 1)
-        self.value_preds = torch.zeros(num_steps + 1, num_processes, 1)
-        self.q_preds = torch.zeros(num_steps + 1, num_processes, 1) #action_space.n
+        self.value_preds = torch.zeros(num_steps, num_processes, 1)
+        self.q_preds = torch.zeros(num_steps, num_processes, 1) #action_space.n
         self.returns = torch.zeros(num_steps + 1, num_processes, 1)
         self.action_log_probs = torch.zeros(num_steps, num_processes, 1)
         self.action_probs = torch.zeros(num_steps, num_processes, 1) #action_space.n
@@ -112,12 +112,19 @@ class RolloutStorage(object):
                 for step in reversed(range(self.rewards.size(0))):
                     action = self.actions[step]
                     mask = self.masks[step + 1] #masks are 1 step off since mask[0] is start
-                    wins = self.rewards[step]
-                    if(wins.min().item() < -4):
-                        pdb.set_trace()
-                    expected = self.value_preds[step]
-                    expected += self.action_probs[step]*(self.returns[step+1] - self.q_preds[step])
-                    self.returns[step] = mask*expected + wins #(1-mask)*wins
+
+                    reward = self.rewards[step]
+                    a = self.action_probs[step]
+                    q = self.q_preds[step]
+                    v = self.value_preds[step]
+                    expected = v - a*(q - (mask*self.returns[step+1] + reward))
+                    self.returns[step] = expected
+
+                    #wins = self.rewards[step]
+                    #expected = self.value_preds[step]
+                    #expected += self.action_probs[step]*(self.returns[step+1] - self.q_preds[step])
+                    #self.returns[step] = mask*expected + wins #(1-mask)*wins
+
                     #self.returns[step] = self.returns[step + 1] * \
                     #    gamma * self.masks[step + 1] + self.rewards[step]
 

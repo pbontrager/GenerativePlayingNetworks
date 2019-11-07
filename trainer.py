@@ -173,7 +173,7 @@ class Trainer(object):
             elif(self.version > 1):
                 self.new_elite_levels(128) #batch_size)
                 self.agent.set_envs(self.temp_dir.name)
-                self.agent.train_agent(1e5) #rl_steps)
+                self.agent.train_agent(rl_steps)
 
             #Not updating, range = 0
             generated_levels = []

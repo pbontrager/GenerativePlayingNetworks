@@ -80,6 +80,7 @@ class GridGame(gym.Wrapper):
         gym.Wrapper.__init__(self, self.env)
 
         self.compiles = True
+        self.compiles_done = False
         self.state = None
         self.steps = 0
         self.score = 0
@@ -96,7 +97,9 @@ class GridGame(gym.Wrapper):
     def step(self, action):
         action = action.item()
         if(not self.compiles):
-           return self.state, -2, True, {}
+           done = self.compiles_done
+           self.compiles_done = not done
+           return self.state, done*-2, done, {}
         _, r, done, info = self.env.step(action)
         if(self.steps >= self.play_length):
             done = True
@@ -134,11 +137,11 @@ class GridGame(gym.Wrapper):
                 reward = 2 - self.steps/self.play_length
             else:
                 reward = -2 + self.steps/self.play_length
-            self.log_reward(self.score + reward)
+            #self.log_reward(reward)
             return reward
         else:
             if(r > 0):
-                return 0
+                return 1/self.play_length
             else:
                 return 0
 
@@ -174,8 +177,8 @@ class GridGame(gym.Wrapper):
             if(os.path.isfile(path + ".no_compile")):
                 self.compiles = False
                 self.state = state
-                #return self.set_level()
-                return state
+                return self.set_level()
+                #return state
             try:
                 self.env.unwrapped._setLevel(path + ".txt")
                 self.test_level()

@@ -36,14 +36,14 @@ class PPOAgent:
     use_gae = False       #generalized advantage estimation
     gae_lambda = 0.95
     entropy_coef = 0.01   #weight maximizing action entropy loss
-    value_loss_coef = 1 #0.5 #weight value function loss
+    value_loss_coef = 0.5 #weight value function loss
     max_grad_norm = 0.5   #max norm of gradients
 
     #ppo hyperparameters
-    clip_param = 0.1      #ppo clip
-    num_steps = 128       #steps before an update
+    clip_param = 0.2    #ppo clip
+    num_steps = 5       #steps before an update
     ppo_epoch = 4
-    num_mini_batch = 4
+    num_mini_batch = 32
 
     seed = 1
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -58,7 +58,7 @@ class PPOAgent:
     eval_log_dir = log_dir + "_eval"
     save_interval = 100
     eval_interval = None
-    recurrent_policy = True
+    recurrent_policy = False
 
     #optimization, RMSprop and TD
     eps = 1e-5    #epsilon
@@ -112,7 +112,7 @@ class PPOAgent:
         self.actor_critic.to(self.device)
 
         #Reconstruction
-        self.reconstruct = True
+        self.reconstruct = False
         if(self.reconstruct):
             print("Move reconstruction to it's own class")
             layers = self.envs.observation_space.shape[0]
@@ -303,7 +303,7 @@ class PPOAgent:
                             self.rollouts.recurrent_hidden_states[step],
                             self.rollouts.masks[step])
 
-                # Obser reward and next obs
+                # Observe reward and next obs
                 obs, reward, done, infos = self.envs.step(action)
 
                 for i, step in enumerate(first_steps):
