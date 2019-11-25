@@ -62,6 +62,7 @@ class A2C_ACKTR():
         value_loss = ((mask*rollouts.returns[1:] + (1-mask)*rewards) - Qs).pow(2).mean()
 
         #A2C: action_loss = -(advantages.detach() *  action_log_probs).mean()
+        epsilon = 1e-6
         action_loss = -(advantages.detach() * action_log_probs).mean()
 
         if self.acktr and self.optimizer.steps % self.optimizer.Ts == 0:

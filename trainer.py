@@ -16,7 +16,7 @@ class Trainer(object):
     def __init__(self, gen, agent, save, version=0):
         self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.generator = gen.to(self.device)
-        self.gen_optimizer = torch.optim.Adam(self.generator.parameters(), lr = 0.0001) #0.0001
+        self.gen_optimizer = gen.optimizer #torch.optim.Adam(self.generator.parameters(), lr = 0.0001) #0.0001
         self.agent = agent
         self.temp_dir = tempfile.TemporaryDirectory()
 
@@ -75,16 +75,21 @@ class Trainer(object):
             for i in range(len(strings)):
                 writer.writerow((update, strings[i], rewards[i], expected_rewards[i].item()))
 
-    def new_elite_levels(self, num):
+    def new_elite_levels(self, z):
+        num = z.size(0)
         rewards = []
         elite_lvls = []
+        no_compile = 0
         for file in os.listdir(self.temp_dir.name):
+            path = os.path.join(self.temp_dir.name, file)
             if(file.endswith('.csv')):
-                path = os.path.join(self.temp_dir.name, file)
                 data = np.genfromtxt(path, delimiter=',', skip_header=1)
                 if(data.ndim == 1):
                     data = np.expand_dims(data, 0)
                 rewards.append(data)
+                os.remove(path)
+            elif(file.endswith('.no_compile')):
+                no_compile += 1
                 os.remove(path)
         if(len(rewards) > 0):
             rewards = np.concatenate(rewards)
@@ -97,12 +102,14 @@ class Trainer(object):
                 with open(os.path.join(self.temp_dir.name,'rewards.csv'), 'w') as logs:
                     writer = csv.writer(logs)
                     writer.writerow(['level','reward'])
-                    for lvl in elite_lvls: #rewards.itertuples()
-                        #lvl = int(r[0])
+                    for lvl in elite_lvls:
                         reward = rewards.loc[lvl].item()
                         writer.writerow([lvl, reward])
 
-        z = torch.Tensor(num, self.generator.z_size).uniform_(0, 1).to(self.device)
+        rewards = np.mean(rewards.values) if not type(rewards)==list else 0
+        self.agent.writer.add_scalar('levels/Elite Levels', len(elite_lvls), self.version)
+        self.agent.writer.add_scalar('levels/Level Reward', rewards, self.version)
+        self.agent.writer.add_scalar('levels/Uncompilable Levels', no_compile, self.version)
         lvl_tensor, states = self.generator.new(z)
         lvl_strs = self.agent.env_def.create_levels(lvl_tensor)
         for i in range(num):
@@ -119,10 +126,10 @@ class Trainer(object):
                 states[i] = torch.Tensor(np.load(path + ".npy")).to(self.device)
         return lvl_strs, states
 
-    def new_levels(self, num):
-        z = torch.Tensor(num, self.generator.z_size).uniform_(0, 1).to(self.device)
+    def new_levels(self, z, save=False):
         lvl_tensor, states = self.generator.new(z)
         lvl_strs = self.agent.env_def.create_levels(lvl_tensor)
+        num = z.size(0) if save else 0
         for i in range(num):
             path = os.path.join(self.temp_dir.name, "lvl_{}".format(i))
             np.save(path + ".npy", states[i].cpu().numpy())
@@ -141,9 +148,10 @@ class Trainer(object):
             p.requires_grad = True
 
     def z_generator(self, batch_size, z_size):
-        return lambda:torch.Tensor(batch_size, z_size).normal_().to(self.device)
+        return lambda b=batch_size, z=z_size:torch.Tensor(b, z).normal_().to(self.device)
 
     def critic(self, x):
+        self.agent.agent.optimizer.zero_grad()
         rnn_hxs = torch.zeros(x.size(0), self.agent.actor_critic.recurrent_hidden_state_size).to(self.device)
         masks = torch.ones(x.size(0), 1).to(self.device)
         actions = torch.zeros_like(masks).long()
@@ -166,42 +174,65 @@ class Trainer(object):
 
         loss = 0
         entropy = 0
+        gen_updates = 0
         for update in range(self.version + 1, self.version + updates + 1):
             if(self.version == 0):
                 self.agent.set_envs() #Pretrain on existing levels
-                self.agent.train_agent(20*rl_steps) #7 or 24
-            elif(self.version > 1):
-                self.new_elite_levels(128) #batch_size)
+                self.agent.train_agent(200*rl_steps) #7 or 24
+                self.save_models(0, 0)
+            elif(self.version >= 1):
+                self.new_elite_levels(z(128)) #batch_size)
                 self.agent.set_envs(self.temp_dir.name)
                 self.agent.train_agent(rl_steps)
 
             #Not updating, range = 0
             generated_levels = []
-            for i in range(1):
-                levels, _ = self.new_levels(8)
+            for i in range(100):
+                levels, _ = self.new_levels(z(8))
                 lvl_imgs = [np.array(self.level_visualizer.draw_level(lvl))/255.0 for lvl in levels]
-                generated_levels += lvl_imgs
+                generated_levels = lvl_imgs
 
                 self.gen_optimizer.zero_grad()
                 levels = self.generator(z())
                 states = self.generator.adapter(levels)
                 expected_value, dist = self.critic(states)
-                target = 2*torch.ones_like(expected_value)
-                #target = torch.zeros(batch_size).to(self.device) #Get average from new_levels, set target curiculum
-                #target_dist = 1.5*torch.ones(batch_size).to(self.device)
+                '''
+                TODO:
+                    Use add_histograms to show distribution of enemy, avatar, key, door, wall counts
+                    Use network reconstruction for generating
+                    Implement InfoGAN metrics
+
+                    Limit catastrophic negative policy values
+                    Treat human levels and good levels like replay buffer
+
+                    Generator should push entropy up, while agent pushes it down 
+                    Level Elites - only take the last version of every level
+                '''
+                diversity = (states[:-1] - states[1:]).pow(2).mean()
+                target = 1*torch.ones_like(expected_value) #Best
+                #target = .5 + torch.rand_like(expected_value)
+                #target_dist = torch.ones_like(dist)
                 #Could add penalty for missing symbols
                 #gen_loss = F.binary_cross_entropy_with_logits(expected_value, target)
                 gen_loss = F.mse_loss(expected_value, target)
-                #gen_loss += F.mse_loss(dist, target_dist)
-                gen_loss.backward()
+                #gen_loss += -.01*dist #F.mse_loss(dist, target_dist)
+                div_loss = -diversity
+                loss = gen_loss + .1*div_loss #.1*dist
+                loss.backward()
                 self.gen_optimizer.step()
-                if(gen_loss.item() < .1):
-                    print("Updated gen {} times".format(i))
-                    break
+
+                self.agent.writer.add_scalar('generator/loss', gen_loss.item(), gen_updates)
+                self.agent.writer.add_scalar('generator/entropy', dist.item(), gen_updates)
+                self.agent.writer.add_scalar('generator/diversity', diversity.item(), gen_updates)
+
+                gen_updates += 1
+                #if(gen_loss.item() < .1):
+                #    print("Updated gen {} times".format(i))
+                #    break
 
             self.agent.writer.add_images('Generated Levels', generated_levels, (update-1), dataformats='HWC')
             #Save a generated level
-            levels, states = self.new_levels(1)
+            levels, states = self.new_levels(z(1))
             with torch.no_grad():
                 expected_rewards = self.critic(states)
             #real_rewards = self.eval_levels(levels)
@@ -212,7 +243,7 @@ class Trainer(object):
             loss += gen_loss.item()
             entropy += dist.item()
             self.version += 1
-            save_frequency = 1
+            save_frequency = 100
             if(update%save_frequency == 0):
                 self.save_models(update, gen_loss)
                 self.save_loss(update, loss/save_frequency)

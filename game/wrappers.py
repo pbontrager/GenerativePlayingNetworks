@@ -75,11 +75,11 @@ class GridGame(gym.Wrapper):
         self.id = id
         self.name = game
         self.levels = path
-        self.level_id = 0
+        self.level_id = -1
         self.env = gym_gvgai.make('gvgai-{}-lvl0-v1'.format(game))
         gym.Wrapper.__init__(self, self.env)
 
-        self.compiles = True
+        self.compiles = False
         self.compiles_done = False
         self.state = None
         self.steps = 0
@@ -89,6 +89,8 @@ class GridGame(gym.Wrapper):
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=shape, dtype=np.float32)
 
     def reset(self):
+        if(self.compiles):
+            self.log_reward(self.score)
         self.steps = 0
         self.score = 0
         state = self.set_level()
@@ -96,10 +98,12 @@ class GridGame(gym.Wrapper):
 
     def step(self, action):
         action = action.item()
+        #if(not self.compiles):
+        #   done = self.compiles_done
+        #   self.compiles_done = not done
+        #   return self.state, done*-2, done, {}
         if(not self.compiles):
-           done = self.compiles_done
-           self.compiles_done = not done
-           return self.state, done*-2, done, {}
+            return self.state, -2, True, {}
         _, r, done, info = self.env.step(action)
         if(self.steps >= self.play_length):
             done = True
@@ -137,7 +141,6 @@ class GridGame(gym.Wrapper):
                 reward = 2 - self.steps/self.play_length
             else:
                 reward = -2 + self.steps/self.play_length
-            #self.log_reward(reward)
             return reward
         else:
             if(r > 0):
@@ -166,31 +169,30 @@ class GridGame(gym.Wrapper):
         return state
 
     def set_level(self):
-        if(self.levels and random.randint(1,5) < 5):
+        if(self.levels and random.randint(1,2) < 2):
             level_names = [file for file in os.listdir(self.levels) if file.endswith('.txt')]
-            selection = random.randint(0, len(level_names) - 1)
-            self.level_id = selection
-            path = os.path.join(self.levels, level_names[selection][:-4])
+            selection = random.choice(level_names)[:-4]
+            self.level_id = int(selection[4:])
+            path = os.path.join(self.levels, selection)
             state = np.load(path + ".npy")
-            with open(path + ".txt", 'r') as f:
-                state_str = f.read()
             if(os.path.isfile(path + ".no_compile")):
                 self.compiles = False
-                self.state = state
-                return self.set_level()
-                #return state
-            try:
-                self.env.unwrapped._setLevel(path + ".txt")
-                self.test_level()
-                self.compiles = True
-            except Exception as e:
-                #print(e)
-                self.restart(e, path)
-                return self.set_level()
-            except SystemExit:
-                #print("SystemExit")
-                self.restart("SystemExit", path)
-                return self.set_level()
+            else:
+                try:
+                    #with open(path + ".txt", 'r') as f:
+                    #    state_str = f.read()
+                    #    print(state_str)
+                    self.env.unwrapped._setLevel(path + ".txt")
+                    self.test_level()
+                    self.compiles = True
+                except Exception as e:
+                    #print(e)
+                    self.compiles = False
+                    self.restart(e, path)
+                except SystemExit:
+                    #print("SystemExit")
+                    self.compiles = False
+                    self.restart("SystemExit", path)
         else:
             self.compiles = True
             self.level_id = -1             #So log_reward doesn't track the validity of this level
@@ -239,5 +241,4 @@ class GridGame(gym.Wrapper):
     def restart(self, e, path):
         #self.log(e)
         open(path + ".no_compile", 'w').close()
-        self.compiles = False
         self.env = gym_gvgai.make('gvgai-{}-lvl0-v0'.format(self.name))

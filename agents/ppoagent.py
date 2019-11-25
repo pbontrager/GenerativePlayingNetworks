@@ -69,7 +69,7 @@ class PPOAgent:
     gail_batch_size = 128
     gail_epoch = 5
 
-    def __init__(self, env_def, processes=1, dir='.', version=0, lr=2.5e-4):
+    def __init__(self, env_def, processes=1, dir='.', version=0, lr=2.5e-4, reconstruct=None):
         self.env_def = env_def
         self.num_processes = processes #cpu processes
         self.lr = lr
@@ -99,7 +99,8 @@ class PPOAgent:
 
         self.level_path = None
         self.envs = None
-        self.set_envs()
+        self.num_envs = -1
+        self.set_envs(num_envs=1)
 
         if(version > 0):
             self.actor_critic = self.load(path, version)
@@ -112,14 +113,15 @@ class PPOAgent:
         self.actor_critic.to(self.device)
 
         #Reconstruction
-        self.reconstruct = False
+        self.reconstruct = True
         if(self.reconstruct):
-            print("Move reconstruction to it's own class")
-            layers = self.envs.observation_space.shape[0]
-            shapes = list(self.env_def.model_shape)
-            self.r_model = Decoder(layers, shapes=shapes).to(self.device)
-            self.r_loss = nn.MSELoss() #Or nn.CrossEntropyLoss() where target is argmax
-            self.r_optimizer = optim.Adam(self.r_model.parameters(), lr = .0001)
+            #layers = self.envs.observation_space.shape[0]
+            #shapes = list(self.env_def.model_shape)
+            #self.r_model = Decoder(layers, shapes=shapes).to(self.device)
+            reconstruct.to(self.device)
+            self.r_model = lambda x: reconstruct.adapter(reconstruct(x)).clamp(min=1e-6).log()
+            self.r_loss = nn.NLLLoss() #nn.MSELoss() #Or nn.CrossEntropyLoss() where target is argmax
+            self.r_optimizer = reconstruct.optimizer #optim.Adam(reconstruct.parameters(), lr = .0001)
 
         if self.algo == 'a2c':
             self.agent = A2C_ACKTR(
@@ -193,14 +195,31 @@ class PPOAgent:
                 writer.writerow(header)
             writer.writerow((version, total_num_steps, FPS, mean, median, min, max))
 
-    def set_envs(self, level_path=None):
-        if(level_path != self.level_path or self.envs is None):
+    def set_envs(self, level_path=None, num_envs=None):
+        num_envs = num_envs if num_envs else self.num_processes
+        if(level_path != self.level_path or self.envs is None or num_envs != self.num_envs):
             if(self.envs is not None):
                 self.envs.close()
             self.level_path = level_path
-            self.envs = make_vec_envs(self.env_def, level_path, self.seed, self.num_processes, self.gamma, self.log_dir, self.device, True)
+            self.envs = make_vec_envs(self.env_def, level_path, self.seed, num_envs, self.gamma, self.log_dir, self.device, True)
+        self.num_envs = num_envs
 
     def update_reconstruction(self, rollouts):
+        s, p, l, w, h = list(rollouts.obs.size())
+        x = rollouts.obs.view(-1, l, w, h)
+        hidden = rollouts.recurrent_hidden_states.view(s*p, -1)
+        mask = rollouts.masks.view(s*p, -1)
+        y = x.argmax(1)
+
+        self.r_optimizer.zero_grad()
+        _, predictions, _ = self.actor_critic.base(x, hidden, mask)
+        reconstructions = self.r_model(predictions)
+        loss = .05*self.r_loss(reconstructions, y)
+        loss.backward()
+        self.r_optimizer.step()
+        return loss
+
+    def update_reconstruct_next(self, rollouts):
         #Mask frames that are not relevant
         mask = rollouts.masks.unfold(0, 2, 1).min(-1)[0]
         mask = mask.view(-1)
@@ -213,8 +232,6 @@ class PPOAgent:
         img_pairs = img_pairs[mask]
         x = img_pairs[:, :, :, :, 0]
         y = img_pairs[:, :, :, :, 1]
-        if(x.size() != torch.Size([len(mask), 14, 12, 16])):
-            pdb.set_trace()
 
         #Input hidden states
         hidden_size = rollouts.recurrent_hidden_states.size(2)
@@ -222,7 +239,6 @@ class PPOAgent:
         hidden = hidden[mask]
 
         #Update model
-        print("Apply minibatching")
         self.r_optimizer.zero_grad()
         mask = torch.ones_like(mask).float().unsqueeze(1)
         _, predictions, _ = self.actor_critic.base(x, hidden, mask)
@@ -351,19 +367,20 @@ class PPOAgent:
 
             value_loss, action_loss, dist_entropy = self.agent.update(self.rollouts)
             if(self.reconstruct):
-                self.update_reconstruction(self.rollouts)
+                recon_loss = self.update_reconstruction(self.rollouts)
 
             self.rollouts.after_update()
 
             #Tensorboard Reporting
             self.total_steps += self.num_processes*self.num_steps
-            self.writer.add_scalar('Mean Reward', np.mean(episode_rewards), self.total_steps)
-            self.writer.add_scalar('Episode Mean Length', np.mean(episode_lengths), self.total_steps)
-            self.writer.add_scalar('Action Loss', action_loss, self.total_steps)
-            self.writer.add_scalar('Value Loss', value_loss, self.total_steps)
-            self.writer.add_scalar('Distribution Entropy', dist_entropy, self.total_steps)
-            self.writer.add_scalar('Win Probability', np.mean(np.array(episode_rewards) > 0), self.total_steps)
-            self.writer.add_scalar('Starting Value', np.mean(episode_values), self.total_steps)
+            self.writer.add_scalar('value/Mean Reward', np.mean(episode_rewards), self.total_steps)
+            self.writer.add_scalar('value/Episode Mean Length', np.mean(episode_lengths), self.total_steps)
+            self.writer.add_scalar('policy/Action Loss', action_loss, self.total_steps)
+            self.writer.add_scalar('value/Value Loss', value_loss, self.total_steps)
+            self.writer.add_scalar('policy/Distribution Entropy', dist_entropy, self.total_steps)
+            self.writer.add_scalar('value/Win Probability', np.mean(np.array(episode_rewards) > 0), self.total_steps)
+            self.writer.add_scalar('value/Starting Value', np.mean(episode_values), self.total_steps)
+            self.writer.add_scalar('generator/Reconstruction Loss', recon_loss.item(), self.total_steps)
 
             # save for every interval-th episode or for the last epoch
             total_num_steps = (j + 1) * self.num_processes * self.num_steps
