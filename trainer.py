@@ -11,6 +11,8 @@ import torch.nn.functional as F
 import level_visualizer
 
 import pdb
+import torch.nn as nn #Philip
+
 
 class Trainer(object):
     def __init__(self, gen, agent, save, version=0):
@@ -80,8 +82,15 @@ class Trainer(object):
         rewards = []
         elite_lvls = []
         no_compile = 0
+        #debug
+        #old_elites = []
+        #debug_nc = set([int(file[4:-11]) for file in os.listdir(self.temp_dir.name) if file.endswith('.no_compile')])
         for file in os.listdir(self.temp_dir.name):
             path = os.path.join(self.temp_dir.name, file)
+            #debug
+            #if(file is 'rewards.csv'):
+            #    data = np.genfromtxt(path, delimiter=',', skip_header=1)
+            #    old_elites = data[:, 0].astype('int').tolist()
             if(file.endswith('.csv')):
                 data = np.genfromtxt(path, delimiter=',', skip_header=1)
                 if(data.ndim == 1):
@@ -93,7 +102,21 @@ class Trainer(object):
                 os.remove(path)
         if(len(rewards) > 0):
             rewards = np.concatenate(rewards)
-            rewards = pd.DataFrame(rewards).groupby(0).mean()
+            rewards = pd.DataFrame(rewards).groupby(0)
+            avg_rewards = rewards.mean()
+            rewards = rewards.max()
+            #debug
+            #debug_played = set(rewards.index.astype('int').tolist())
+            #debug_played_nc = debug_played.intersection(debug_nc)
+            #if(len(debug_played_nc) > 0):
+            #    nc_stats = {}
+            #    for nc in debug_played_nc:
+            #        with open(self.temp_dir.name + '/lvl_{}.txt'.format(nc), 'r') as f:
+            #            nc_lvl = f.read()
+            #        nc_stats[nc] = [nc_lvl.find('A'), nc_lvl.find('g'), nc_lvl.find('+')]
+            #    if(min([min(i) for i in nc_stats.values()]) < 0):
+            #        pdb.set_trace()
+
             winning_rewards = rewards[rewards[1] > 0].sort_values(1)
             losing_rewards = rewards[rewards[1] <= 0].sort_values(1, ascending=False)
             rewards = pd.concat([winning_rewards, losing_rewards])
@@ -105,13 +128,15 @@ class Trainer(object):
                     for lvl in elite_lvls:
                         reward = rewards.loc[lvl].item()
                         writer.writerow([lvl, reward])
-
-        rewards = np.mean(rewards.values) if not type(rewards)==list else 0
+        #debug
+        print(elite_lvls)
+        rewards = np.mean(avg_rewards.values) if not type(rewards)==list else 0
         self.agent.writer.add_scalar('levels/Elite Levels', len(elite_lvls), self.version)
         self.agent.writer.add_scalar('levels/Level Reward', rewards, self.version)
         self.agent.writer.add_scalar('levels/Uncompilable Levels', no_compile, self.version)
         lvl_tensor, states = self.generator.new(z)
         lvl_strs = self.agent.env_def.create_levels(lvl_tensor)
+        elite_images = []
         for i in range(num):
             path = os.path.join(self.temp_dir.name, "lvl_{}".format(i))
             if(i not in elite_lvls):
@@ -124,6 +149,9 @@ class Trainer(object):
                 with open(path + ".txt") as f:
                     lvl_strs[i] = f.read()
                 states[i] = torch.Tensor(np.load(path + ".npy")).to(self.device)
+                elite_images.append(np.array(self.level_visualizer.draw_level(lvl_strs[i]))/255.0)
+        if(len(elite_images) > 0):
+            self.agent.writer.add_images('Elite Levels', elite_images[:8], (self.version), dataformats='HWC')
         return lvl_strs, states
 
     def new_levels(self, z, save=False):
@@ -172,28 +200,30 @@ class Trainer(object):
         self.generator.train()
         z = self.z_generator(batch_size, self.generator.z_size)
 
+        scale = nn.Linear(512, 512).to(self.device) #Philip
+
         loss = 0
         entropy = 0
         gen_updates = 0
         for update in range(self.version + 1, self.version + updates + 1):
-            if(self.version == 0):
+            if(self.version == -1): #debug
                 self.agent.set_envs() #Pretrain on existing levels
                 self.agent.train_agent(200*rl_steps) #7 or 24
                 self.save_models(0, 0)
-            elif(self.version >= 1):
+            elif(self.version >= 0): #debug was 1
                 self.new_elite_levels(z(128)) #batch_size)
                 self.agent.set_envs(self.temp_dir.name)
                 self.agent.train_agent(rl_steps)
 
             #Not updating, range = 0
             generated_levels = []
-            for i in range(100):
-                levels, _ = self.new_levels(z(8))
+            for i in range(1):
+                levels, _ = self.new_levels(scale(z(8))) #Philip
                 lvl_imgs = [np.array(self.level_visualizer.draw_level(lvl))/255.0 for lvl in levels]
                 generated_levels = lvl_imgs
 
                 self.gen_optimizer.zero_grad()
-                levels = self.generator(z())
+                levels = self.generator(scale(z())) #Philip
                 states = self.generator.adapter(levels)
                 expected_value, dist = self.critic(states)
                 '''
@@ -205,7 +235,7 @@ class Trainer(object):
                     Limit catastrophic negative policy values
                     Treat human levels and good levels like replay buffer
 
-                    Generator should push entropy up, while agent pushes it down 
+                    Generator should push entropy up, while agent pushes it down
                     Level Elites - only take the last version of every level
                 '''
                 diversity = (states[:-1] - states[1:]).pow(2).mean()
@@ -217,7 +247,7 @@ class Trainer(object):
                 gen_loss = F.mse_loss(expected_value, target)
                 #gen_loss += -.01*dist #F.mse_loss(dist, target_dist)
                 div_loss = -diversity
-                loss = gen_loss + .1*div_loss #.1*dist
+                loss = gen_loss + div_loss #.1*dist
                 loss.backward()
                 self.gen_optimizer.step()
 
@@ -226,9 +256,9 @@ class Trainer(object):
                 self.agent.writer.add_scalar('generator/diversity', diversity.item(), gen_updates)
 
                 gen_updates += 1
-                #if(gen_loss.item() < .1):
-                #    print("Updated gen {} times".format(i))
-                #    break
+                if(gen_loss.item() < .1):
+                    print("Updated gen {} times".format(i))
+                    break
 
             self.agent.writer.add_images('Generated Levels', generated_levels, (update-1), dataformats='HWC')
             #Save a generated level

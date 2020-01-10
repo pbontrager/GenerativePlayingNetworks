@@ -36,7 +36,7 @@ class PPOAgent:
     use_gae = False       #generalized advantage estimation
     gae_lambda = 0.95
     entropy_coef = 0.01   #weight maximizing action entropy loss
-    value_loss_coef = 0.5 #weight value function loss
+    value_loss_coef = 0.1 #.5 #weight value function loss
     max_grad_norm = 0.5   #max norm of gradients
 
     #ppo hyperparameters
@@ -58,7 +58,7 @@ class PPOAgent:
     eval_log_dir = log_dir + "_eval"
     save_interval = 100
     eval_interval = None
-    recurrent_policy = False
+    recurrent_policy = True
 
     #optimization, RMSprop and TD
     eps = 1e-5    #epsilon
@@ -113,14 +113,14 @@ class PPOAgent:
         self.actor_critic.to(self.device)
 
         #Reconstruction
-        self.reconstruct = True
+        self.reconstruct = reconstruct is not None
         if(self.reconstruct):
             #layers = self.envs.observation_space.shape[0]
             #shapes = list(self.env_def.model_shape)
             #self.r_model = Decoder(layers, shapes=shapes).to(self.device)
             reconstruct.to(self.device)
             self.r_model = lambda x: reconstruct.adapter(reconstruct(x)).clamp(min=1e-6).log()
-            self.r_loss = nn.NLLLoss() #nn.MSELoss() #Or nn.CrossEntropyLoss() where target is argmax
+            self.r_loss = nn.NLLLoss() #nn.CrossEntropyLoss() #nn.MSELoss() #nn.NLLLoss()
             self.r_optimizer = reconstruct.optimizer #optim.Adam(reconstruct.parameters(), lr = .0001)
 
         if self.algo == 'a2c':
@@ -212,11 +212,13 @@ class PPOAgent:
         y = x.argmax(1)
 
         self.r_optimizer.zero_grad()
+        self.agent.optimizer.zero_grad()
         _, predictions, _ = self.actor_critic.base(x, hidden, mask)
         reconstructions = self.r_model(predictions)
-        loss = .05*self.r_loss(reconstructions, y)
+        loss = .05*self.r_loss(reconstructions, y) #.05
         loss.backward()
         self.r_optimizer.step()
+        self.agent.optimizer.step()
         return loss
 
     def update_reconstruct_next(self, rollouts):
@@ -298,6 +300,8 @@ class PPOAgent:
         n = 30
         episode_rewards = deque(maxlen=n)
         episode_values = deque(maxlen=n)
+        episode_end_values = deque(maxlen=n)
+        episode_end_probs = deque(maxlen=n)
         episode_lengths = deque(maxlen=n)
         first_steps = [True for i in range(self.num_processes)]
 
@@ -325,6 +329,9 @@ class PPOAgent:
                 for i, step in enumerate(first_steps):
                     if step:
                         episode_values.append(value[i].item())
+                    elif(done[i]):
+                        episode_end_values.append(Q[i].item())
+                        episode_end_probs.append(action_log_prob[i].item())
                 first_steps = done
 
                 for info in infos:
@@ -368,6 +375,7 @@ class PPOAgent:
             value_loss, action_loss, dist_entropy = self.agent.update(self.rollouts)
             if(self.reconstruct):
                 recon_loss = self.update_reconstruction(self.rollouts)
+                self.writer.add_scalar('generator/Reconstruction Loss', recon_loss.item(), self.total_steps)
 
             self.rollouts.after_update()
 
@@ -380,7 +388,8 @@ class PPOAgent:
             self.writer.add_scalar('policy/Distribution Entropy', dist_entropy, self.total_steps)
             self.writer.add_scalar('value/Win Probability', np.mean(np.array(episode_rewards) > 0), self.total_steps)
             self.writer.add_scalar('value/Starting Value', np.mean(episode_values), self.total_steps)
-            self.writer.add_scalar('generator/Reconstruction Loss', recon_loss.item(), self.total_steps)
+            self.writer.add_scalar('value/Ending Value', np.mean(episode_end_values), self.total_steps)
+            self.writer.add_scalar('value/Log Probs', np.mean(episode_end_probs), self.total_steps)
 
             # save for every interval-th episode or for the last epoch
             total_num_steps = (j + 1) * self.num_processes * self.num_steps

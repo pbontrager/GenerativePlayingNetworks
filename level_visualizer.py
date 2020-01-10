@@ -30,11 +30,20 @@ class LevelVisualizer:
             return string[:comment_idx]
         return string
 
-    def remove_excess_avatars(self, level_str):
+    def remove_excess_objs(self, level_str):
         if('A' in level_str):
             avatar_idx = level_str.index('A')
             level_str = level_str.replace('A', '.')
             level_str = level_str[:avatar_idx] + 'A' + level_str[avatar_idx+1:]
+        #Philip: Add method to read singelton after file read, then loop through those characters here
+        if('+' in level_str):
+            avatar_idx = level_str.index('+')
+            level_str = level_str.replace('+', '.')
+            level_str = level_str[:avatar_idx] + '+' + level_str[avatar_idx+1:]
+        if('g' in level_str):
+            avatar_idx = level_str.index('g')
+            level_str = level_str.replace('g', '.')
+            level_str = level_str[:avatar_idx] + 'g' + level_str[avatar_idx+1:]
         return level_str
 
     def sprite_mapping(self):
@@ -89,7 +98,7 @@ class LevelVisualizer:
             sprite = Image.new('RGBA', (12,11), (0,0,0, 255)) #
             d = ImageDraw.Draw(sprite)
             d.text((3,0), alias)
-        sprite = sprite.resize((self.tile_size, self.tile_size), Image.ANTIALIAS)
+        sprite = sprite.resize((self.tile_size, self.tile_size)) #, Image.ANTIALIAS) #Philip: remove antialias from library
         return sprite
 
     def _build_tile(self, name, sprite_list, background = -1):
@@ -112,7 +121,7 @@ class LevelVisualizer:
         return lvl_tiles
 
     def draw_level(self, level_str):
-        level_str = self.remove_excess_avatars(level_str)
+        level_str = self.remove_excess_objs(level_str)
         lvl_rows = level_str.split()
         w = len(lvl_rows[0])
         h = len(lvl_rows)

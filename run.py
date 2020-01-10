@@ -19,7 +19,7 @@ def main(game_name, game_length):
 
 	#Agent
 	num_processes = 16
-	experiment = "Reconstruction_Gen"
+	experiment = "Slow_Critic_Upsample" #Pretraining set to 0, 20k steps, remove debug, remove wrapper and trainer debug
 	agent = PPOAgent(env, num_processes, experiment, lr=.00025, reconstruct=gen) #.00025
 
 	agent.writer.add_hparams({'Experiment': experiment, 'lr':.00025, 'Minibatch':32, 'RL_Steps': 1e5, 'Notes':'Reconstruction Loss'}, {})
@@ -29,7 +29,7 @@ def main(game_name, game_length):
 	#agent.train_agent(1e8)
 
 	#Training
-	t = Trainer(gen, agent, experiment, 1) #save agent_1.tar as pretrained_agent.tar
+	t = Trainer(gen, agent, experiment, 0) #save agent_1.tar as pretrained_agent.tar
 	t.train(1000, 32, 1e5) #1000, 32, 8192
 	#t.train(10e6, 8192, 32) #10m training steps, in batches of 8192 steps per 32 levels
 

@@ -80,17 +80,16 @@ class GridGame(gym.Wrapper):
         gym.Wrapper.__init__(self, self.env)
 
         self.compiles = False
-        self.compiles_done = False
         self.state = None
         self.steps = 0
         self.score = 0
+        #self.debug3 = 0 #debug
+        #self.debug2 = 0 #debug
         self.play_length = play_length
         self.shape = shape
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=shape, dtype=np.float32)
 
     def reset(self):
-        if(self.compiles):
-            self.log_reward(self.score)
         self.steps = 0
         self.score = 0
         state = self.set_level()
@@ -98,17 +97,19 @@ class GridGame(gym.Wrapper):
 
     def step(self, action):
         action = action.item()
-        #if(not self.compiles):
-        #   done = self.compiles_done
-        #   self.compiles_done = not done
-        #   return self.state, done*-2, done, {}
         if(not self.compiles):
-            return self.state, -2, True, {}
+            return self.state, -3, True, {}
         _, r, done, info = self.env.step(action)
         if(self.steps >= self.play_length):
             done = True
         reward = self.get_reward(done, info["winner"], r) #extra r parameter
         state = self.get_state(info['grid'])
+        #debug
+        #walls = [j for i in info['ascii'].split('\n') for j in (i+',\n').split(',')]
+        #walls = [i for i,j in enumerate(walls) if 'wall' in j]
+        #if(self.level_id > -1 and walls != self.debug): # and self.steps < 2):
+        #    pdb.set_trace()
+        #end debug
         self.steps += 1
         self.score += reward
         return state, reward, done, {}
@@ -141,6 +142,7 @@ class GridGame(gym.Wrapper):
                 reward = 2 - self.steps/self.play_length
             else:
                 reward = -2 + self.steps/self.play_length
+            self.log_reward(self.score + reward)
             return reward
         else:
             if(r > 0):
@@ -169,6 +171,8 @@ class GridGame(gym.Wrapper):
         return state
 
     def set_level(self):
+        #self.debug3 = self.debug2
+        #self.debug2 = 0
         if(self.levels and random.randint(1,2) < 2):
             level_names = [file for file in os.listdir(self.levels) if file.endswith('.txt')]
             selection = random.choice(level_names)[:-4]
@@ -179,20 +183,28 @@ class GridGame(gym.Wrapper):
                 self.compiles = False
             else:
                 try:
+                    #debug print
                     #with open(path + ".txt", 'r') as f:
-                    #    state_str = f.read()
-                    #    print(state_str)
+                        #state_str = f.read()
+                        #self.debug = [i for i,j in enumerate(state_str) if j is 'w'] #debug
+                        #print(selection)
+                        #print(state_str)
+                        #if(state_str.find('A') == -1):
+                        #    pdb.set_trace()
                     self.env.unwrapped._setLevel(path + ".txt")
                     self.test_level()
                     self.compiles = True
+                    #self.debug2 = 1
                 except Exception as e:
                     #print(e)
                     self.compiles = False
                     self.restart(e, path)
+                    #self.debug2 = 2
                 except SystemExit:
                     #print("SystemExit")
                     self.compiles = False
                     self.restart("SystemExit", path)
+                    #self.debug2 = 3
         else:
             self.compiles = True
             self.level_id = -1             #So log_reward doesn't track the validity of this level
@@ -201,6 +213,7 @@ class GridGame(gym.Wrapper):
             self.env.reset()
             _, _, _, info = self.env.step(0)
             state = self.get_state(info['grid'])
+            #self.debug2 = 4
         self.state = state
         return state
 
