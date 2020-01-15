@@ -6,12 +6,13 @@ import numpy as np
 import pandas as pd
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
 
+from torchvision.utils import make_grid
 import level_visualizer
 
 import pdb
-import torch.nn as nn #Philip
 
 
 class Trainer(object):
@@ -151,7 +152,7 @@ class Trainer(object):
                 states[i] = torch.Tensor(np.load(path + ".npy")).to(self.device)
                 elite_images.append(np.array(self.level_visualizer.draw_level(lvl_strs[i]))/255.0)
         if(len(elite_images) > 0):
-            self.agent.writer.add_images('Elite Levels', elite_images[:8], (self.version), dataformats='HWC')
+            self.agent.writer.add_image('Elite Levels', make_grid(elite_images[:8], pad_value=1), (self.version), dataformats='HWC')
         return lvl_strs, states
 
     def new_levels(self, z, save=False):
@@ -198,9 +199,16 @@ class Trainer(object):
 
     def train(self, updates, batch_size, rl_steps):
         self.generator.train()
-        z = self.z_generator(batch_size, self.generator.z_size)
+        z = self.z_generator(batch_size, 128) #self.generator.z_size) scale debug
 
-        scale = nn.Linear(512, 512).to(self.device) #Philip
+        #scale debug
+        #scale = nn.Sequential(
+        #    nn.Linear(64, 128, bias=False), nn.ReLU(),
+        #    nn.Linear(128, 256, bias=False), nn.ReLU(),
+        #    nn.Linear(256, 512, bias=False), nn.ReLU())
+        scale = nn.Linear(128, 512)
+        scale.to(self.device)
+        scale_optim = torch.optim.Adam(scale.parameters(), lr=1e-4) #scale debug
 
         loss = 0
         entropy = 0
@@ -208,22 +216,23 @@ class Trainer(object):
         for update in range(self.version + 1, self.version + updates + 1):
             if(self.version == -1): #debug
                 self.agent.set_envs() #Pretrain on existing levels
-                self.agent.train_agent(200*rl_steps) #7 or 24
+                self.agent.train_agent(200*rl_steps) #200*rl_steps
                 self.save_models(0, 0)
             elif(self.version >= 0): #debug was 1
-                self.new_elite_levels(z(128)) #batch_size)
+                self.new_elite_levels(scale(z(128))) #batch_size) scale debug
                 self.agent.set_envs(self.temp_dir.name)
                 self.agent.train_agent(rl_steps)
 
             #Not updating, range = 0
             generated_levels = []
-            for i in range(1):
-                levels, _ = self.new_levels(scale(z(8))) #Philip
+            for i in range(5):
+                levels, _ = self.new_levels(scale(z(8)))
                 lvl_imgs = [np.array(self.level_visualizer.draw_level(lvl))/255.0 for lvl in levels]
                 generated_levels = lvl_imgs
 
                 self.gen_optimizer.zero_grad()
-                levels = self.generator(scale(z())) #Philip
+                scale_optim.zero_grad() #scale debug
+                levels = self.generator(scale(z()))
                 states = self.generator.adapter(levels)
                 expected_value, dist = self.critic(states)
                 '''
@@ -242,14 +251,14 @@ class Trainer(object):
                 target = 1*torch.ones_like(expected_value) #Best
                 #target = .5 + torch.rand_like(expected_value)
                 #target_dist = torch.ones_like(dist)
-                #Could add penalty for missing symbols
                 #gen_loss = F.binary_cross_entropy_with_logits(expected_value, target)
                 gen_loss = F.mse_loss(expected_value, target)
                 #gen_loss += -.01*dist #F.mse_loss(dist, target_dist)
                 div_loss = -diversity
-                loss = gen_loss + div_loss #.1*dist
+                loss = gen_loss + dist #+ div_loss #.1*dist
                 loss.backward()
-                self.gen_optimizer.step()
+                self.gen_optimizer.step() #scale debug
+                scale_optim.step()  #scale Debug
 
                 self.agent.writer.add_scalar('generator/loss', gen_loss.item(), gen_updates)
                 self.agent.writer.add_scalar('generator/entropy', dist.item(), gen_updates)
@@ -260,9 +269,9 @@ class Trainer(object):
                     print("Updated gen {} times".format(i))
                     break
 
-            self.agent.writer.add_images('Generated Levels', generated_levels, (update-1), dataformats='HWC')
+            self.agent.writer.add_image('Generated Levels', make_grid(generated_levels, pad_value=1), (update-1), dataformats='HWC')
             #Save a generated level
-            levels, states = self.new_levels(z(1))
+            levels, states = self.new_levels(scale(z(1))) #scale debug
             with torch.no_grad():
                 expected_rewards = self.critic(states)
             #real_rewards = self.eval_levels(levels)

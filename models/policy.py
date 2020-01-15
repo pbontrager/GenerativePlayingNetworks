@@ -240,6 +240,11 @@ class CNNDeep(NNBase):
              nn.MaxPool2d(3, padding=1, stride=2), nn.ReLU(),
              ResidualBlock(32, 32))
 
+        #self.block4 = nn.Sequential(
+        #    nn.Conv2d(32, 32, 3, padding=1, stride=1), nn.ReLU(),
+        #    nn.MaxPool2d(3, padding=1, stride=2), nn.ReLU(),
+        #    ResidualBlock(32, 32))
+
         self.flat = nn.Sequential(Flatten(),
              nn.Linear(32*4*4, hidden_size),
              nn.ReLU())
@@ -251,6 +256,7 @@ class CNNDeep(NNBase):
         x = self.block1(inputs)
         x = self.block2(x)
         x = self.block3(x)
+        #x = self.block4(x) #large input
         x = self.flat(x)
 
         if self.is_recurrent:

@@ -10,7 +10,7 @@ class Resize(nn.Module):
         self.shape = shape
 
     def forward(self, x):
-        return nn.functional.interpolate(x, size=self.shape, mode='bilinear', align_corners=True)
+        return nn.functional.interpolate(x, size=self.shape, mode='nearest') #mode='bilinear', align_corners=True)
 
 class LevelAdapter(nn.Module):
     def __init__(self, mapping, shape):

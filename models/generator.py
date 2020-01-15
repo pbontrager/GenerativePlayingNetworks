@@ -3,7 +3,8 @@ import torch.nn as nn
 
 import models.utils as utils
 #import models.deconv_gen as gen
-import models.bilinear_gen as gen
+#import models.bilinear_gen as gen
+import models.pixelshuffle_gen as gen
 
 class Generator(nn.Module):
     def __init__(self, latent_shape, env):

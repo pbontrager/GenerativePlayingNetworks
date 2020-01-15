@@ -119,8 +119,9 @@ class PPOAgent:
             #shapes = list(self.env_def.model_shape)
             #self.r_model = Decoder(layers, shapes=shapes).to(self.device)
             reconstruct.to(self.device)
-            self.r_model = lambda x: reconstruct.adapter(reconstruct(x)).clamp(min=1e-6).log()
-            self.r_loss = nn.NLLLoss() #nn.CrossEntropyLoss() #nn.MSELoss() #nn.NLLLoss()
+            self.r_model = lambda x: reconstruct.adapter(reconstruct(x))
+            #self.r_model = lambda x: reconstruct.adapter(reconstruct(x)).clamp(min=1e-6).log()
+            self.r_loss = nn.L1Loss(reduction='sum') #nn.NLLLoss() #nn.MSELoss()
             self.r_optimizer = reconstruct.optimizer #optim.Adam(reconstruct.parameters(), lr = .0001)
 
         if self.algo == 'a2c':
@@ -209,13 +210,14 @@ class PPOAgent:
         x = rollouts.obs.view(-1, l, w, h)
         hidden = rollouts.recurrent_hidden_states.view(s*p, -1)
         mask = rollouts.masks.view(s*p, -1)
-        y = x.argmax(1)
+        #y = x.argmax(1)
+        y = x
 
         self.r_optimizer.zero_grad()
         self.agent.optimizer.zero_grad()
         _, predictions, _ = self.actor_critic.base(x, hidden, mask)
         reconstructions = self.r_model(predictions)
-        loss = .05*self.r_loss(reconstructions, y) #.05
+        loss = self.r_loss(reconstructions, y) #.05
         loss.backward()
         self.r_optimizer.step()
         self.agent.optimizer.step()
@@ -336,8 +338,13 @@ class PPOAgent:
 
                 for info in infos:
                     if 'episode' in info.keys():
-                        episode_rewards.append(info['episode']['r'])
-                        episode_lengths.append(info['episode']['l'])
+                        r = info['episode']['r']
+                        l = info['episode']['l']
+                        episode_rewards.append(r)
+                        episode_lengths.append(l)
+                        if(r < -2):
+                            print('Reward: {} and Length: {}'.format(r, l))
+                            pdb.set_break()
 
                 # If done then clean the history of observations.
                 masks = torch.FloatTensor(
@@ -388,7 +395,7 @@ class PPOAgent:
             self.writer.add_scalar('policy/Distribution Entropy', dist_entropy, self.total_steps)
             self.writer.add_scalar('value/Win Probability', np.mean(np.array(episode_rewards) > 0), self.total_steps)
             self.writer.add_scalar('value/Starting Value', np.mean(episode_values), self.total_steps)
-            self.writer.add_scalar('value/Ending Value', np.mean(episode_end_values), self.total_steps)
+            #self.writer.add_scalar('value/Ending Value', np.mean(episode_end_values), self.total_steps)
             self.writer.add_scalar('value/Log Probs', np.mean(episode_end_probs), self.total_steps)
 
             # save for every interval-th episode or for the last epoch

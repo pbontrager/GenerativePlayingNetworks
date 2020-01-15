@@ -22,7 +22,7 @@ def main(game_name, game_length):
 	experiment = "Slow_Critic_Upsample" #Pretraining set to 0, 20k steps, remove debug, remove wrapper and trainer debug
 	agent = PPOAgent(env, num_processes, experiment, lr=.00025, reconstruct=gen) #.00025
 
-	agent.writer.add_hparams({'Experiment': experiment, 'lr':.00025, 'Minibatch':32, 'RL_Steps': 1e5, 'Notes':'Reconstruction Loss'}, {})
+	agent.writer.add_hparams({'Experiment': experiment, 'lr':.00025, 'Minibatch':32, 'RL_Steps': 1e5, 'Notes':'Pixel Shuffle Reconstruction'}, {})
 
         #Test
 	#agent.set_envs()

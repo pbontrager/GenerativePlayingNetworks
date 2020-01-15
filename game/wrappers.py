@@ -255,3 +255,39 @@ class GridGame(gym.Wrapper):
         #self.log(e)
         open(path + ".no_compile", 'w').close()
         self.env = gym_gvgai.make('gvgai-{}-lvl0-v0'.format(self.name))
+
+class CenteredGym(gym.Wrapper):
+    def __init__(self, env, mapping, ascii):
+        self.env = env
+        self.name = self.env.name
+        gym.Wrapper.__init__(self, self.env)
+
+        self.avatar = mapping[ascii.index('A')]
+
+        d, h, w = self.env.shape
+        self.shape = (d, h + 2*(h//2), w + 2*(w//2))
+        self.pad = (self.shape[1]//2, self.shape[2]//2)
+        self.observation_space = gym.spaces.Box(low=0, high=1, shape=self.shape, dtype=np.float32)
+
+    def step(self, action):
+        obs, reward, done, info = self.env.step(action)
+        obs = self.transform(obs)
+        return obs, reward, done, info
+
+    def reset(self):
+        obs = self.env.reset()
+        obs = self.transform(obs)
+        return obs
+
+    def transform(self, obs):
+        x, y = self.get_pos(obs)
+        pad_dims = ((0, 0), (self.pad[0], self.pad[0]), (self.pad[1], self.pad[1]))
+        padded = np.pad(obs, pad_dims, mode='constant')
+        centered  = padded[:, y:y + self.shape[1], x:x + self.shape[2]]
+        return centered
+
+    def get_pos(self, obs):
+        #map = obs[self.avatar]
+        #pos = np.unravel_index(map.argmax(), map.shape)
+        y, x = np.argwhere(obs.argmax(0)==self.avatar)[0]
+        return (x, y)
