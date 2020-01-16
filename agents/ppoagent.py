@@ -121,7 +121,8 @@ class PPOAgent:
             reconstruct.to(self.device)
             self.r_model = lambda x: reconstruct.adapter(reconstruct(x))
             #self.r_model = lambda x: reconstruct.adapter(reconstruct(x)).clamp(min=1e-6).log()
-            self.r_loss = nn.L1Loss(reduction='sum') #nn.NLLLoss() #nn.MSELoss()
+            #self.r_loss = nn.L1Loss() #nn.NLLLoss() #nn.MSELoss()
+            self.r_loss = lambda pred, true: -(true*torch.log(pred.clamp(min=1e-7, max=1-1e-7))).sum(dim=1).mean()
             self.r_optimizer = reconstruct.optimizer #optim.Adam(reconstruct.parameters(), lr = .0001)
 
         if self.algo == 'a2c':
