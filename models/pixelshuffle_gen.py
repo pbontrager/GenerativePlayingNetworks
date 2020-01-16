@@ -39,7 +39,7 @@ class Generator(nn.Module):
         self.output = nn.Sequential(
             #utils.Resize(shapes[-1]), #pixel shuffle
             nn.Conv2d(in_ch, out_ch*4, 3, padding=1, bias=True), #Pixel Shuffle
-            nn.PixelShuffle(2) #Pixel Shuffle
+            nn.PixelShuffle(2), #Pixel Shuffle
             nn.Softmax2d()
         )
 

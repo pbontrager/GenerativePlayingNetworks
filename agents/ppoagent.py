@@ -305,6 +305,7 @@ class PPOAgent:
         episode_end_values = deque(maxlen=n)
         episode_end_probs = deque(maxlen=n)
         episode_lengths = deque(maxlen=n)
+        compile_est = deque(maxlen=n)
         first_steps = [True for i in range(self.num_processes)]
 
         start = time.time()
@@ -336,15 +337,14 @@ class PPOAgent:
                         episode_end_probs.append(action_log_prob[i].item())
                 first_steps = done
 
-                for info in infos:
+                for worker, info in enumerate(infos):
                     if 'episode' in info.keys():
                         r = info['episode']['r']
                         l = info['episode']['l']
                         episode_rewards.append(r)
                         episode_lengths.append(l)
                         if(r < -2):
-                            print('Reward: {} and Length: {}'.format(r, l))
-                            pdb.set_break()
+                            compile_est.append(value[worker].item())
 
                 # If done then clean the history of observations.
                 masks = torch.FloatTensor(
@@ -397,6 +397,8 @@ class PPOAgent:
             self.writer.add_scalar('value/Starting Value', np.mean(episode_values), self.total_steps)
             #self.writer.add_scalar('value/Ending Value', np.mean(episode_end_values), self.total_steps)
             self.writer.add_scalar('value/Log Probs', np.mean(episode_end_probs), self.total_steps)
+            if(len(compile_est) > 0):
+                self.writer.add_scalar('value/Compile Estimate', np.mean(compile_est), self.total_steps)
 
             # save for every interval-th episode or for the last epoch
             total_num_steps = (j + 1) * self.num_processes * self.num_steps

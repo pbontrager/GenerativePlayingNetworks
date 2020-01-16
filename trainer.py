@@ -152,7 +152,7 @@ class Trainer(object):
                 states[i] = torch.Tensor(np.load(path + ".npy")).to(self.device)
                 elite_images.append(np.array(self.level_visualizer.draw_level(lvl_strs[i]))/255.0)
         if(len(elite_images) > 0):
-            self.agent.writer.add_image('Elite Levels', make_grid(elite_images[:8], pad_value=1), (self.version), dataformats='HWC')
+            self.agent.writer.add_images('Elite Levels', elite_images[:8], (self.version), dataformats='HWC')
         return lvl_strs, states
 
     def new_levels(self, z, save=False):
@@ -214,11 +214,11 @@ class Trainer(object):
         entropy = 0
         gen_updates = 0
         for update in range(self.version + 1, self.version + updates + 1):
-            if(self.version == -1): #debug
+            if(self.version == 0): #debug
                 self.agent.set_envs() #Pretrain on existing levels
                 self.agent.train_agent(200*rl_steps) #200*rl_steps
                 self.save_models(0, 0)
-            elif(self.version >= 0): #debug was 1
+            elif(self.version >= 1): #debug was 1
                 self.new_elite_levels(scale(z(128))) #batch_size) scale debug
                 self.agent.set_envs(self.temp_dir.name)
                 self.agent.train_agent(rl_steps)
@@ -269,7 +269,7 @@ class Trainer(object):
                     print("Updated gen {} times".format(i))
                     break
 
-            self.agent.writer.add_image('Generated Levels', make_grid(generated_levels, pad_value=1), (update-1), dataformats='HWC')
+            self.agent.writer.add_images('Generated Levels', generated_levels, (update-1), dataformats='HWC')
             #Save a generated level
             levels, states = self.new_levels(scale(z(1))) #scale debug
             with torch.no_grad():
