@@ -218,7 +218,7 @@ class PPOAgent:
         self.agent.optimizer.zero_grad()
         _, predictions, _ = self.actor_critic.base(x, hidden, mask)
         reconstructions = self.r_model(predictions)
-        loss = self.r_loss(reconstructions, y) #.05
+        loss = .05*self.r_loss(reconstructions, y) #.05
         loss.backward()
         self.r_optimizer.step()
         self.agent.optimizer.step()
