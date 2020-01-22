@@ -5,6 +5,7 @@ baselines
 
 #Data
 experiment*/
+Experiments*/
 trained_models/*
 runs/*
 log*

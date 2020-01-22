@@ -48,16 +48,16 @@ def make_vec_envs(env_def, level_path, seed, num_processes, gamma, log_dir, devi
     else:
         envs = DummyVecEnv(envs)
 
-    if len(envs.observation_space.shape) == 1:
-        if gamma is None:
-            envs = VecNormalize(envs, ret=False)
-        else:
-            envs = VecNormalize(envs, gamma=gamma)
+    #if len(envs.observation_space.shape) == 1:
+    #    if gamma is None:
+    #        envs = VecNormalize(envs, ret=False)
+    #    else:
+    #        envs = VecNormalize(envs, gamma=gamma)
 
     envs = torch_env.VecPyTorch(envs, device)
 
-    if num_frame_stack is not None:
-        envs = torch_env.VecPyTorchFrameStack(envs, num_frame_stack, device)
+    #if num_frame_stack is not None:
+    #    envs = torch_env.VecPyTorchFrameStack(envs, num_frame_stack, device)
     #elif len(envs.observation_space.shape) == 3:
     #    envs = torch_env.VecPyTorchFrameStack(envs, 4, device)
 

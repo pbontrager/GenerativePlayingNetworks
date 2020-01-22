@@ -173,15 +173,13 @@ class PPOAgent:
                                   self.actor_critic.recurrent_hidden_state_size)
 
     def load(self, path, version):
-        policy, ob_rms = torch.load(os.path.join(path, "agent_{}.tar".format(version)))
-        print("Not using ob_rms: {}".format(ob_rms))
+        policy = torch.load(os.path.join(path, "agent_{}.tar".format(version)))
         #utils.get_vec_normalize(self.envs).ob_rms = ob_rms
         self.actor_critic = policy
 
     def save(self, path, version):
-        ob_rms = getattr(utils.get_vec_normalize(self.envs), 'ob_rms', None)
-        torch.save([self.actor_critic, ob_rms],
-            os.path.join(path, "agent_{}.tar".format(version)))
+        #ob_rms = getattr(utils.get_vec_normalize(self.envs), 'ob_rms', None)
+        torch.save(self.actor_critic, os.path.join(path, "agent_{}.tar".format(version)))
 
     def report(self, version, total_num_steps, FPS, rewards):
         file_path = os.path.join(self.save_dir, "actor_critic_results.csv")

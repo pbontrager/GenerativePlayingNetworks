@@ -2,6 +2,7 @@ import os
 import csv
 import pathlib
 import tempfile
+import math
 import numpy as np
 import pandas as pd
 
@@ -83,15 +84,8 @@ class Trainer(object):
         rewards = []
         elite_lvls = []
         no_compile = 0
-        #debug
-        #old_elites = []
-        #debug_nc = set([int(file[4:-11]) for file in os.listdir(self.temp_dir.name) if file.endswith('.no_compile')])
         for file in os.listdir(self.temp_dir.name):
             path = os.path.join(self.temp_dir.name, file)
-            #debug
-            #if(file is 'rewards.csv'):
-            #    data = np.genfromtxt(path, delimiter=',', skip_header=1)
-            #    old_elites = data[:, 0].astype('int').tolist()
             if(file.endswith('.csv')):
                 data = np.genfromtxt(path, delimiter=',', skip_header=1)
                 if(data.ndim == 1):
@@ -106,17 +100,6 @@ class Trainer(object):
             rewards = pd.DataFrame(rewards).groupby(0)
             avg_rewards = rewards.mean()
             rewards = rewards.max()
-            #debug
-            #debug_played = set(rewards.index.astype('int').tolist())
-            #debug_played_nc = debug_played.intersection(debug_nc)
-            #if(len(debug_played_nc) > 0):
-            #    nc_stats = {}
-            #    for nc in debug_played_nc:
-            #        with open(self.temp_dir.name + '/lvl_{}.txt'.format(nc), 'r') as f:
-            #            nc_lvl = f.read()
-            #        nc_stats[nc] = [nc_lvl.find('A'), nc_lvl.find('g'), nc_lvl.find('+')]
-            #    if(min([min(i) for i in nc_stats.values()]) < 0):
-            #        pdb.set_trace()
 
             winning_rewards = rewards[rewards[1] > 0].sort_values(1)
             losing_rewards = rewards[rewards[1] <= 0].sort_values(1, ascending=False)
@@ -129,8 +112,7 @@ class Trainer(object):
                     for lvl in elite_lvls:
                         reward = rewards.loc[lvl].item()
                         writer.writerow([lvl, reward])
-        #debug
-        print(elite_lvls)
+
         rewards = np.mean(avg_rewards.values) if not type(rewards)==list else 0
         self.agent.writer.add_scalar('levels/Elite Levels', len(elite_lvls), self.version)
         self.agent.writer.add_scalar('levels/Level Reward', rewards, self.version)
@@ -200,6 +182,7 @@ class Trainer(object):
     def train(self, updates, batch_size, rl_steps):
         self.generator.train()
         z = self.z_generator(batch_size, self.generator.z_size) #128 scale debug
+        z_norm = lambda z: (z.norm(dim=1) - math.sqrt(self.generator.z_size)) / .7
 
         #scale debug
         #scale = nn.Sequential(
@@ -214,16 +197,15 @@ class Trainer(object):
         entropy = 0
         gen_updates = 0
         for update in range(self.version + 1, self.version + updates + 1):
-            if(self.version == 0): #debug
+            if(self.version == 0):
                 self.agent.set_envs() #Pretrain on existing levels
                 self.agent.train_agent(200*rl_steps) #200*rl_steps
-                self.save_models(0, 0)
-            elif(self.version >= 1): #debug was 1
+                self.save_models(1, 0)
+            elif(self.version >= 1):
                 self.new_elite_levels(z(128)) #batch_size) scale debug
                 self.agent.set_envs(self.temp_dir.name)
                 self.agent.train_agent(rl_steps)
 
-            #Not updating, range = 0
             generated_levels = []
             for i in range(5):
                 levels, _ = self.new_levels(z(8))
@@ -232,23 +214,13 @@ class Trainer(object):
 
                 self.gen_optimizer.zero_grad()
                 #scale_optim.zero_grad() #scale debug
-                levels = self.generator(z())
+                noise = z()
+                levels = self.generator(noise)
                 states = self.generator.adapter(levels)
                 expected_value, dist = self.critic(states)
-                '''
-                TODO:
-                    Use add_histograms to show distribution of enemy, avatar, key, door, wall counts
-                    Use network reconstruction for generating
-                    Implement InfoGAN metrics
-
-                    Limit catastrophic negative policy values
-                    Treat human levels and good levels like replay buffer
-
-                    Generator should push entropy up, while agent pushes it down
-                    Level Elites - only take the last version of every level
-                '''
                 diversity = (states[:-1] - states[1:]).pow(2).mean()
-                target = 1*torch.ones_like(expected_value) #Best
+                #target = 1*torch.ones_like(expected_value) #Best
+                target = .5 + .5*z_norm(noise)
                 #target = .5 + torch.rand_like(expected_value)
                 #target_dist = torch.ones_like(dist)
                 #gen_loss = F.binary_cross_entropy_with_logits(expected_value, target)
