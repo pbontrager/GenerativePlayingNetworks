@@ -165,9 +165,14 @@ class Trainer(object):
         self.agent.agent.optimizer.zero_grad()
         rnn_hxs = torch.zeros(x.size(0), self.agent.actor_critic.recurrent_hidden_state_size).to(self.device)
         masks = torch.ones(x.size(0), 1).to(self.device)
-        actions = torch.zeros_like(masks).long()
-        value, _, _, _, dist_entropy, _ = self.agent.actor_critic.evaluate_actions(x, rnn_hxs, masks, actions)
-        return value, dist_entropy
+        #actions = torch.zeros_like(masks).long()
+
+        #value, _, _, _, dist_entropy, _ = self.agent.actor_critic.evaluate_actions(x, rnn_hxs, masks, actions)
+        Qs, actor_features, _ = self.agent.actor_critic.base(x, rnn_hxs, masks)
+        dist = self.agent.actor_critic.dist(actor_features)
+        value = (dist.probs*Qs).sum(1).unsqueeze(1)
+        dist_entropy = dist.entropy().mean()
+        return value, dist_entropy, actor_features
         #return self.agent.actor_critic.get_value(x, rnn_hxs, masks)
 
     def eval_levels(self, tensor):
@@ -207,7 +212,7 @@ class Trainer(object):
                 self.agent.train_agent(rl_steps)
 
             generated_levels = []
-            for i in range(5):
+            for i in range(20):
                 levels, _ = self.new_levels(z(8))
                 lvl_imgs = [np.array(self.level_visualizer.draw_level(lvl))/255.0 for lvl in levels]
                 generated_levels = lvl_imgs
@@ -217,17 +222,20 @@ class Trainer(object):
                 noise = z()
                 levels = self.generator(noise)
                 states = self.generator.adapter(levels)
-                expected_value, dist = self.critic(states)
-                diversity = (states[:-1] - states[1:]).pow(2).mean()
-                #target = 1*torch.ones_like(expected_value) #Best
-                target = .5 + .5*z_norm(noise)
+                expected_value, dist, hidden = self.critic(states)
+                #diversity = (states[:-1] - states[1:]).pow(2).mean()
+                diversity = (hidden[:-1] - hidden[1:]).pow(2).mean()
+                target = 1*torch.ones_like(expected_value) #Best
+                #target = .5 + .5*z_norm(noise)
                 #target = .5 + torch.rand_like(expected_value)
                 #target_dist = torch.ones_like(dist)
                 #gen_loss = F.binary_cross_entropy_with_logits(expected_value, target)
                 gen_loss = F.mse_loss(expected_value, target)
-                #gen_loss += -.01*dist #F.mse_loss(dist, target_dist)
                 div_loss = -diversity
-                loss = gen_loss + dist #+ div_loss #.1*dist
+                if(i < 5):
+                     loss = gen_loss
+                else:
+                     loss = div_loss #dist
                 loss.backward()
                 self.gen_optimizer.step()
                 #scale_optim.step()  #scale Debug
