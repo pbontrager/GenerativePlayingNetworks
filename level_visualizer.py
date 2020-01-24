@@ -3,12 +3,13 @@ import gym_gvgai
 from PIL import Image, ImageDraw, ImageFont
 
 class LevelVisualizer:
-    def __init__(self, env, tile_size=16):
+    def __init__(self, env, tile_size=16, padding=2):
         self.game = env
         self.version = 'v1'
         self.tile_size = tile_size
         self.dir = gym_gvgai.dir
 
+        self.pad = padding
         self.game_description = self.read_gamefile()
         self.sprite_paths = self.sprite_mapping()
         self.level_mapping = self.ascii_map()
@@ -111,7 +112,7 @@ class LevelVisualizer:
             foreground = self.get_sprite(sprite_list[0], name)
             background = Image.alpha_composite(background, foreground)
             return self._build_tile(name, sprite_list[1:], background)
-    
+
     def build_tiles(self):
         lvl_tiles = {}
         for k in self.level_mapping:
@@ -126,11 +127,12 @@ class LevelVisualizer:
         w = len(lvl_rows[0])
         h = len(lvl_rows)
         ts = self.tile_size
-        lvl_img = Image.new("RGB", (w*ts, h*ts))
+        p = self.pad
+        lvl_img = Image.new("RGB", (w*ts+2*p, h*ts + 2*p), (255, 255, 255))
 
         for y,r in enumerate(lvl_rows):
             for x,c in enumerate(r):
                 img = self.tiles[c]
-                lvl_img.paste(img, (x*ts, y*ts, (x+1)*ts, (y+1)*ts))
-                
+                lvl_img.paste(img, (p + x*ts, p + y*ts, p + (x+1)*ts, p + (y+1)*ts))
+
         return lvl_img
