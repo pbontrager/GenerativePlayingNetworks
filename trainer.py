@@ -212,7 +212,7 @@ class Trainer(object):
                 self.agent.train_agent(rl_steps)
 
             generated_levels = []
-            for i in range(20):
+            for i in range(100):
                 levels, _ = self.new_levels(z(8))
                 lvl_imgs = [np.array(self.level_visualizer.draw_level(lvl))/255.0 for lvl in levels]
                 generated_levels = lvl_imgs
