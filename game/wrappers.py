@@ -7,7 +7,7 @@ import csv
 import random
 import numpy as np
 
-import timeout_decorator
+#import timeout_decorator
 
 import gym
 import gym_gvgai
@@ -76,7 +76,8 @@ class GridGame(gym.Wrapper):
         self.name = game
         self.levels = path
         self.level_id = -1
-        self.env = gym_gvgai.make('gvgai-{}-lvl0-v1'.format(game))
+        self.version = 1
+        self.env = gym_gvgai.make('gvgai-{}-lvl0-v{}'.format(game, self.version))
         gym.Wrapper.__init__(self, self.env)
 
         self.compiles = False
@@ -196,7 +197,7 @@ class GridGame(gym.Wrapper):
     def restart(self, e, path):
         #self.log(e)
         open(path + ".no_compile", 'w').close()
-        self.env = gym_gvgai.make('gvgai-{}-lvl0-v0'.format(self.name))
+        self.env = gym_gvgai.make('gvgai-{}-lvl0-v{}'.format(self.name, self.version))
 
 class CenteredGym(gym.Wrapper):
     def __init__(self, env, mapping, ascii):
