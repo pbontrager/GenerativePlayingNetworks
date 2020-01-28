@@ -28,8 +28,9 @@ class Generator(nn.Module):
                 nn.Conv2d(in_ch, 2*out_ch, 3, padding=1, bias=False), #pixel shuffle *2
                 nn.LeakyReLU(True),
                 nn.Conv2d(2*out_ch, out_ch*4, 3, padding=1, bias=False), #pixel shuffle *4
-                nn.BatchNorm2d(out_ch*4), #pixel shuffle
+                #nn.BatchNorm2d(out_ch*4), #pixel shuffle
                 nn.LeakyReLU(True),
+                nn.Dropout(),
                 nn.PixelShuffle(2) #pixel shuffle
             )
             in_ch = out_ch
