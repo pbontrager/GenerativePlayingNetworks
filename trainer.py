@@ -204,7 +204,7 @@ class Trainer(object):
         for update in range(self.version + 1, self.version + updates + 1):
             if(self.version == 0):
                 self.agent.set_envs() #Pretrain on existing levels
-                self.agent.train_agent(200*rl_steps) #200*rl_steps
+                self.agent.train_agent(2e7)
                 self.save_models(1, 0)
             elif(self.version >= 1):
                 self.new_elite_levels(z(128)) #batch_size) scale debug

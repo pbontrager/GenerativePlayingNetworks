@@ -231,12 +231,12 @@ class CNNDeep(NNBase):
              ResidualBlock(16, 16))
 
         self.block2 = nn.Sequential(
-             nn.Conv2d(16, 32, 3, padding=1, stride=2), nn.ReLU(),
+             nn.Conv2d(16, 32, 4, padding=1, stride=2), nn.ReLU(),
              #nn.MaxPool2d(3, padding=1, stride=2), nn.ReLU(),
              ResidualBlock(32, 32))
 
         self.block3 = nn.Sequential(
-             nn.Conv2d(32, 32, 3, padding=1, stride=2), nn.ReLU(),
+             nn.Conv2d(32, 32, 4, padding=1, stride=2), nn.ReLU(),
              #nn.MaxPool2d(3, padding=1, stride=2), nn.ReLU(),
              ResidualBlock(32, 32))
 

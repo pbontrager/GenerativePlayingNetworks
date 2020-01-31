@@ -26,8 +26,9 @@ class Generator(nn.Module):
             nn.ReLU(True),
             # state size. (ngf*8) x 3 x 4
             nn.ConvTranspose2d(256, 128, 4, 2, 1, bias=False),
-            nn.BatchNorm2d(128),
+            #nn.BatchNorm2d(128),
             nn.ReLU(True),
+            nn.Dropout(),
             # state size. (ngf*4) x 6 x 8
             nn.ConvTranspose2d(128, layers, 4, 2, 1, bias=False),
             # state size. (ngf*2) x 12 x 16
