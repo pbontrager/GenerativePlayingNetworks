@@ -342,7 +342,7 @@ class PPOAgent:
                         l = info['episode']['l']
                         episode_rewards.append(r)
                         episode_lengths.append(l)
-                        if(r < -2):
+                        if(r < -1):
                             compile_est.append(value[worker].item())
 
                 # If done then clean the history of observations.
