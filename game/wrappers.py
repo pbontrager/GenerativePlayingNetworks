@@ -97,7 +97,7 @@ class GridGame(gym.Wrapper):
     def step(self, action):
         action = action.item()
         if(not self.compiles):
-            return self.state, -3, True, {}
+            return self.state, -1.01, True, {}
         _, r, done, info = self.env.step(action)
         if(self.steps >= self.play_length):
             done = True
@@ -110,16 +110,16 @@ class GridGame(gym.Wrapper):
     def get_reward(self, isOver, winner, r):
         if(isOver):
             if(winner == 'PLAYER_WINS'):
-                reward = 2 - self.steps/self.play_length
+                reward = 1 - self.steps/self.play_length
             else:
-                reward = -2 + self.steps/self.play_length
+                reward = -1 + self.steps/self.play_length
             self.log_reward(self.score + reward)
             return reward
         else:
-            if(r > 0):
-                return 1/self.play_length
-            else:
-                return 0
+            #if(r > 0):
+            #    return 1/self.play_length
+            #else:
+            return 0
 
     def get_state(self, grid):
         state = self.pad(grid)

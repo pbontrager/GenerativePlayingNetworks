@@ -225,14 +225,14 @@ class Trainer(object):
                 expected_value, dist, hidden = self.critic(states)
                 #diversity = (states[:-1] - states[1:]).pow(2).mean()
                 diversity = (hidden[:-1] - hidden[1:]).pow(2).mean()
-                target = 1*torch.ones_like(expected_value) #Best
+                target = torch.zeros_like(expected_value) #was ones like
                 #target = .5 + .5*z_norm(noise)
                 #target = .5 + torch.rand_like(expected_value)
                 #target_dist = torch.ones_like(dist)
                 #gen_loss = F.binary_cross_entropy_with_logits(expected_value, target)
                 gen_loss = F.mse_loss(expected_value, target)
                 div_loss = -diversity
-                if(i < 5):
+                if(i < 10):
                      loss = gen_loss
                 else:
                      loss = div_loss #dist
