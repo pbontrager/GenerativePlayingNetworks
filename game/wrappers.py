@@ -97,7 +97,7 @@ class GridGame(gym.Wrapper):
     def step(self, action):
         action = action.item()
         if(not self.compiles):
-            return self.state, -1.01, True, {}
+            return self.state, -2.0, True, {}
         _, r, done, info = self.env.step(action)
         if(self.steps >= self.play_length):
             done = True
@@ -110,9 +110,9 @@ class GridGame(gym.Wrapper):
     def get_reward(self, isOver, winner, r):
         if(isOver):
             if(winner == 'PLAYER_WINS'):
-                reward = 1 - self.steps/self.play_length
+                reward = 1 #- self.steps/self.play_length
             else:
-                reward = -1 + self.steps/self.play_length
+                reward = -1 #+ self.steps/self.play_length
             self.log_reward(self.score + reward)
             return reward
         else:
@@ -128,7 +128,7 @@ class GridGame(gym.Wrapper):
         return state
 
     def set_level(self):
-        if(self.levels and random.randint(1,2) < 2):
+        if(self.levels and random.randint(1,32) > -1):
             level_names = [file for file in os.listdir(self.levels) if file.endswith('.txt')]
             selection = random.choice(level_names)[:-4]
             self.level_id = int(selection[4:])

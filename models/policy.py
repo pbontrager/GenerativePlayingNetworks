@@ -24,7 +24,7 @@ class Policy(nn.Module):
             base_kwargs = {}
         if base is None:
             if len(obs_shape) == 3:
-                base = CNNDeep
+                base = CNNBase
             elif len(obs_shape) == 1:
                 base = MLPBase
             else:
@@ -194,7 +194,7 @@ class CNNBase(NNBase):
         self.main = nn.Sequential(
              nn.Conv2d(num_inputs, 128, 3, padding=(3,1), stride=1), nn.ReLU(),
              nn.Conv2d(128, 64, 3, padding=1, stride=2), nn.ReLU(),
-             nn.Conv2d(64, 32, 3, padding=1, stride=2), nn.ReLU(), Flatten(),
+             nn.Conv2d(64, 32, 3, padding=1, stride=2), nn.ReLU(), Flatten(), nn.Dropout(0),
              nn.Linear(32*4*4, hidden_size), nn.ReLU())
 
         self.critic_linear = nn.Linear(hidden_size, 1)

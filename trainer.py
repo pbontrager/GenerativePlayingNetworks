@@ -13,6 +13,8 @@ import torch.nn.functional as F
 from torchvision.utils import make_grid
 import level_visualizer
 
+import distributionLoss
+
 import pdb
 
 
@@ -22,6 +24,7 @@ class Trainer(object):
         self.generator = gen.to(self.device)
         self.gen_optimizer = gen.optimizer #torch.optim.Adam(self.generator.parameters(), lr = 0.0001) #0.0001
         self.agent = agent
+        self.loss = distributionLoss.NormalDivLoss().to(self.device) #F.mse_loss
         self.temp_dir = tempfile.TemporaryDirectory()
 
         self.save_paths = {'dir':save}
@@ -189,7 +192,6 @@ class Trainer(object):
         z = self.z_generator(batch_size, self.generator.z_size) #128 scale debug
         z_norm = lambda z: (z.norm(dim=1) - math.sqrt(self.generator.z_size)) / .7
 
-        #scale debug
         #scale = nn.Sequential(
         #    nn.Linear(64, 128, bias=False), nn.ReLU(),
         #    nn.Linear(128, 256, bias=False), nn.ReLU(),
@@ -202,17 +204,17 @@ class Trainer(object):
         entropy = 0
         gen_updates = 0
         for update in range(self.version + 1, self.version + updates + 1):
-            if(self.version == 0):
+            if(self.version == -1):
                 self.agent.set_envs() #Pretrain on existing levels
                 self.agent.train_agent(2e7)
                 self.save_models(1, 0)
-            elif(self.version >= 1):
-                self.new_elite_levels(z(128)) #batch_size) scale debug
+            elif(self.version >= 0):
+                self.new_elite_levels(z(batch_size)) #batch_size) scale debug
                 self.agent.set_envs(self.temp_dir.name)
                 self.agent.train_agent(rl_steps)
 
             generated_levels = []
-            for i in range(100):
+            for i in range(10):
                 levels, _ = self.new_levels(z(8))
                 lvl_imgs = [np.array(self.level_visualizer.draw_level(lvl))/255.0 for lvl in levels]
                 generated_levels = lvl_imgs
@@ -223,16 +225,17 @@ class Trainer(object):
                 levels = self.generator(noise)
                 states = self.generator.adapter(levels)
                 expected_value, dist, hidden = self.critic(states)
-                #diversity = (states[:-1] - states[1:]).pow(2).mean()
-                diversity = (hidden[:-1] - hidden[1:]).pow(2).mean()
-                target = torch.zeros_like(expected_value) #was ones like
-                #target = .5 + .5*z_norm(noise)
-                #target = .5 + torch.rand_like(expected_value)
-                #target_dist = torch.ones_like(dist)
+                diversity = (states[:-1] - states[1:]).pow(2).mean()
+                #diversity = (hidden[:-1] - hidden[1:]).pow(2).mean()
+                #target = torch.zeros_like(expected_value) #was ones like
+                ##target = .5 + .5*z_norm(noise)
+                ##target = .5 + torch.rand_like(expected_value)
+                ##target_dist = torch.ones_like(dist)
                 #gen_loss = F.binary_cross_entropy_with_logits(expected_value, target)
-                gen_loss = F.mse_loss(expected_value, target)
+                #gen_loss = F.mse_loss(expected_value, target)
+                gen_loss = self.loss(expected_value)
                 div_loss = -diversity
-                if(i < 10):
+                if(i < 100):
                      loss = gen_loss
                 else:
                      loss = div_loss #dist
@@ -240,14 +243,12 @@ class Trainer(object):
                 self.gen_optimizer.step()
                 #scale_optim.step()  #scale Debug
 
-                self.agent.writer.add_scalar('generator/loss', gen_loss.item(), gen_updates)
-                self.agent.writer.add_scalar('generator/entropy', dist.item(), gen_updates)
-                self.agent.writer.add_scalar('generator/diversity', diversity.item(), gen_updates)
+            #Debug normally inside the loop
+            self.agent.writer.add_scalar('generator/loss', gen_loss.item(), gen_updates)
+            self.agent.writer.add_scalar('generator/entropy', dist.item(), gen_updates)
+            self.agent.writer.add_scalar('generator/diversity', diversity.item(), gen_updates)
 
-                gen_updates += 1
-                if(gen_loss.item() < .1):
-                    print("Updated gen {} times".format(i))
-                    break
+            gen_updates += 1
 
             self.agent.writer.add_images('Generated Levels', generated_levels, (update-1), dataformats='HWC')
             #Save a generated level
