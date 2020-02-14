@@ -1,5 +1,5 @@
 from models.generator import Generator
-from agents.ppoagent import PPOAgent
+from agents.agent import Agent
 from trainer import Trainer
 from game.env import Env
 import torch
@@ -14,11 +14,11 @@ def main(game_name, game_length):
 	gen = Generator(latent_shape, env)
 
 	#Agent
-	num_processes = 24
-	experiment = "Experiments_zero" #Pretraining set to 0, 20k steps, remove debug, remove wrapper and trainer debug
-	agent = PPOAgent(env, num_processes, experiment, lr=.00025) #, reconstruct=gen) #.00025
+	num_processes = 1
+	experiment = "Experiments" #Pretraining set to 0, 20k steps, remove debug, remove wrapper and trainer debug
+	agent = Agent(env, num_processes, experiment, lr=.00025) #, reconstruct=gen) #.00025
 
-	agent.writer.add_hparams({'Experiment': experiment, 'lr':.00025, 'Minibatch':32, 'RL_Steps': 1e5, 'Notes':'Mean loss, ciriculum elite, no memory'}, {})
+	agent.writer.add_hparams({'Experiment': experiment, 'lr':.00025, 'Minibatch':32, 'RL_Steps': 1e4, 'Notes':''}, {})
 
 	#Training
 	gen_updates = 1e4
