@@ -1,5 +1,6 @@
-# GenerativePlayingNetworks
+# Generative Playing Networks
 Research Into Learning to Generate Environments through Interaction and Play
+
 ![Algorithm Diagram](genplayingnets.png)
 
 Paper can be found here: https://arxiv.org/pdf/2002.05259.pdf
