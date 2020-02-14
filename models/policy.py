@@ -194,7 +194,7 @@ class CNNBase(NNBase):
         self.main = nn.Sequential(
              nn.Conv2d(num_inputs, 128, 3, padding=(3,1), stride=1), nn.ReLU(),
              nn.Conv2d(128, 64, 3, padding=1, stride=2), nn.ReLU(),
-             nn.Conv2d(64, 32, 3, padding=1, stride=2), nn.ReLU(), Flatten(), nn.Dropout(0),
+             nn.Conv2d(64, 32, 3, padding=1, stride=2), nn.ReLU(), Flatten(), nn.Dropout(.3),
              nn.Linear(32*4*4, hidden_size), nn.ReLU())
 
         self.critic_linear = nn.Linear(hidden_size, 1)

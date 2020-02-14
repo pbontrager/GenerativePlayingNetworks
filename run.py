@@ -15,17 +15,20 @@ def main(game_name, game_length):
 
 	#Agent
 	num_processes = 24
-	experiment = "Experiments_post" #Pretraining set to 0, 20k steps, remove debug, remove wrapper and trainer debug
+	experiment = "Experiments_zero" #Pretraining set to 0, 20k steps, remove debug, remove wrapper and trainer debug
 	agent = PPOAgent(env, num_processes, experiment, lr=.00025) #, reconstruct=gen) #.00025
 
-	agent.writer.add_hparams({'Experiment': experiment, 'lr':.00025, 'Minibatch':32, 'RL_Steps': 1e5, 'Notes':'KL Loss'}, {})
+	agent.writer.add_hparams({'Experiment': experiment, 'lr':.00025, 'Minibatch':32, 'RL_Steps': 1e5, 'Notes':'Mean loss, ciriculum elite, no memory'}, {})
 
 	#Training
+	gen_updates = 1e4
+	gen_batch = 32
+	rl_batch = 1e4
 	t = Trainer(gen, agent, experiment, 0) #save agent_1.tar as pretrained_agent.tar
-	t.train(1000, 32, 1e4) #1000, 32, 8192
+	t.train(gen_updates, gen_batch, rl_batch) #1000, 32, 8192
 
 if(__name__ == "__main__"):
-	main('zelda', 1e4)
+	main('zelda', 1000)
 
 #Run experiment with dropout and only target ideal highest "certain" reward until 0"
 

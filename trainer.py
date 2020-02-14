@@ -24,7 +24,7 @@ class Trainer(object):
         self.generator = gen.to(self.device)
         self.gen_optimizer = gen.optimizer #torch.optim.Adam(self.generator.parameters(), lr = 0.0001) #0.0001
         self.agent = agent
-        self.loss = distributionLoss.NormalDivLoss().to(self.device) #F.mse_loss
+        self.loss = lambda x: (x.mean() - 0).pow(2) + (x.std() - .3).pow(2) #distributionLoss.NormalDivLoss().to(self.device) #F.mse_loss
         self.temp_dir = tempfile.TemporaryDirectory()
 
         self.save_paths = {'dir':save}
@@ -104,17 +104,18 @@ class Trainer(object):
             avg_rewards = rewards.mean()
             rewards = rewards.max()
 
-            winning_rewards = rewards[rewards[1] > 0].sort_values(1)
-            losing_rewards = rewards[rewards[1] <= 0].sort_values(1, ascending=False)
-            rewards = pd.concat([winning_rewards, losing_rewards])
-            elite_lvls = rewards.index.astype('int')[:num//3].tolist()
-            if(len(elite_lvls) > 0):
-                with open(os.path.join(self.temp_dir.name,'rewards.csv'), 'w') as logs:
-                    writer = csv.writer(logs)
-                    writer.writerow(['level','reward'])
-                    for lvl in elite_lvls:
-                        reward = rewards.loc[lvl].item()
-                        writer.writerow([lvl, reward])
+            #winning_rewards = rewards[rewards[1] > 0].sort_values(1)
+            #losing_rewards = rewards[rewards[1] <= 0].sort_values(1, ascending=False)
+            #rewards = pd.concat([winning_rewards, losing_rewards])
+            sorted_rewards = rewards.abs().sort_values(1)
+            elite_lvls = sorted_rewards.index.astype('int')[:num//3].tolist()
+            #if(len(elite_lvls) > 0):
+            #    with open(os.path.join(self.temp_dir.name,'rewards.csv'), 'w') as logs:
+            #        writer = csv.writer(logs)
+            #        writer.writerow(['level','reward'])
+            #        for lvl in elite_lvls:
+            #            reward = rewards.loc[lvl].item()
+            #            writer.writerow([lvl, reward])
 
         rewards = np.mean(avg_rewards.values) if not type(rewards)==list else 0
         self.agent.writer.add_scalar('levels/Elite Levels', len(elite_lvls), self.version)
@@ -203,7 +204,7 @@ class Trainer(object):
         loss = 0
         entropy = 0
         gen_updates = 0
-        for update in range(self.version + 1, self.version + updates + 1):
+        for update in range(self.version + 1, self.version + int(updates) + 1):
             if(self.version == -1):
                 self.agent.set_envs() #Pretrain on existing levels
                 self.agent.train_agent(2e7)
@@ -214,7 +215,7 @@ class Trainer(object):
                 self.agent.train_agent(rl_steps)
 
             generated_levels = []
-            for i in range(10):
+            for i in range(1):
                 levels, _ = self.new_levels(z(8))
                 lvl_imgs = [np.array(self.level_visualizer.draw_level(lvl))/255.0 for lvl in levels]
                 generated_levels = lvl_imgs

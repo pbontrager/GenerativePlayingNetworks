@@ -14,7 +14,7 @@ class Generator(nn.Module):
         self.gen_lvl = gen.Generator(env.mapping, env.model_shape, latent_shape)
         self.lvl_to_state = utils.LevelAdapter(env.mapping, env.state_shape)
 
-        self.optimizer = torch.optim.Adam(self.gen_lvl.parameters(), lr = 0.01) #.0001
+        self.optimizer = torch.optim.Adam(self.gen_lvl.parameters(), lr = 0.0001) #.0001
 
     def forward(self, x):
         return self.gen_lvl(x)
