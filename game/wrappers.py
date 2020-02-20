@@ -21,12 +21,12 @@ from baselines.common.vec_env.vec_normalize import VecNormalize
 
 import pdb
 
-def make_env(env_def, path, seed, rank, log_dir, allow_early_resets):
+def make_env(env_def, path, seed, rank, log_dir, allow_early_resets, **env_kwargs):
     def _thunk():
         if(path):
-            env = GridGame(env_def.name, env_def.length, env_def.state_shape, path, id=rank)
+            env = GridGame(env_def.name, env_def.length, env_def.state_shape, path, id=rank, **env_def.kwargs)
         else:
-            env = GridGame(env_def.name, env_def.length, env_def.state_shape, id=rank)
+            env = GridGame(env_def.name, env_def.length, env_def.state_shape, id=rank, **env_def.kwargs)
 
         #env.seed(seed + rank)
         obs_shape = env.observation_space.shape
@@ -65,7 +65,7 @@ def make_vec_envs(env_def, level_path, seed, num_processes, gamma, log_dir, devi
 
 #Look at baseline wrappers and make a wrapper file: New vec_wrapper + game_wrapper
 class GridGame(gym.Wrapper):
-    def __init__(self, game, play_length, shape, path=None, id=0):
+    def __init__(self, game, play_length, shape, path=None, id=0, reward_mode='time', reward_scale=2, elite_prob=0):
         """Returns Grid instead of pixels
         Sets the reward
         Generates new level on reset
@@ -88,6 +88,10 @@ class GridGame(gym.Wrapper):
         self.shape = shape
         self.observation_space = gym.spaces.Box(low=0, high=1, shape=shape, dtype=np.float32)
 
+        self.elitep = elite_prob
+        self.rmode = reward_mode
+        self.rscale = reward_scale
+
     def reset(self):
         self.steps = 0
         self.score = 0
@@ -97,28 +101,44 @@ class GridGame(gym.Wrapper):
     def step(self, action):
         action = action.item()
         if(not self.compiles):
-            return self.state, -2.0, True, {}
+            return self.state, -self.rscale, True, {}
         _, r, done, info = self.env.step(action)
         if(self.steps >= self.play_length):
             done = True
-        reward = self.get_reward(done, info["winner"], r)
+        if(self.rmode=='base'):
+            reward = self.get_reward(done, info["winner"], r)
+        elif(self.rmode=='time'):
+            reward = self.get_time_reward(done, info["winner"], r)
+        else:
+            raise Exception("Reward Scheme Not Implemented")
         state = self.get_state(info['grid'])
         self.steps += 1
         self.score += reward
         return state, reward, done, {}
 
-    def get_reward(self, isOver, winner, r):
+    def get_time_reward(self, isOver, winner, r):
         if(isOver):
             if(winner == 'PLAYER_WINS'):
-                reward = 1 #- self.steps/self.play_length
+                reward = self.rscale - self.steps/self.play_length
             else:
-                reward = -1 #+ self.steps/self.play_length
+                reward = -self.rscale + self.steps/self.play_length
             self.log_reward(self.score + reward)
             return reward
         else:
-            #if(r > 0):
-            #    return 1/self.play_length
-            #else:
+            if(r > 0):
+                return 1/self.play_length
+            else:
+                return 0
+
+    def get_reward(self, isOver, winner, r):
+        if(isOver):
+            if(winner == 'PLAYER_WINS'):
+                reward = 1
+            else:
+                reward = -1
+            self.log_reward(self.score + reward)
+            return reward
+        else:
             return 0
 
     def get_state(self, grid):
@@ -128,7 +148,7 @@ class GridGame(gym.Wrapper):
         return state
 
     def set_level(self):
-        if(self.levels and random.randint(1,32) > -1):
+        if(self.levels and random.random() >= self.elitep):
             level_names = [file for file in os.listdir(self.levels) if file.endswith('.txt')]
             selection = random.choice(level_names)[:-4]
             self.level_id = int(selection[4:])

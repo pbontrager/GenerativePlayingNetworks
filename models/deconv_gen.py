@@ -11,7 +11,7 @@ import models.utils as utils
 import pdb
 
 class Generator(nn.Module):
-    def __init__(self, mapping, shapes, z_shape):
+    def __init__(self, mapping, shapes, z_shape, dropout):
         super(Generator, self).__init__()
         self.z_size = z_shape[0]
         layers = len(mapping)
@@ -28,7 +28,7 @@ class Generator(nn.Module):
             nn.ConvTranspose2d(256, 128, 4, 2, 1, bias=False),
             #nn.BatchNorm2d(128),
             nn.ReLU(True),
-            nn.Dropout(),
+            nn.Dropout(dropout),
             # state size. (ngf*4) x 6 x 8
             nn.ConvTranspose2d(128, layers, 4, 2, 1, bias=False),
             # state size. (ngf*2) x 12 x 16

@@ -9,7 +9,7 @@ from operator import mul
 import models.utils as utils
 
 class Generator(nn.Module):
-    def __init__(self, mapping, shapes, z_shape):
+    def __init__(self, mapping, shapes, z_shape, dropout):
         super(Generator, self).__init__()
         self.z_size = z_shape[0]
         filters = 512

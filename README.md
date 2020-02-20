@@ -42,5 +42,5 @@ pip install -e .
 ![Sample Generated Levels](gen_sample.png)
 
 ## Disclaimer
-Current parameters are different from the paper and as such the results will look different.
-Not all the experiment parameters are extracted from the code, will be updated over the next two week along with paper configurations.
+Current default parameters are different from the paper and as such the results will look different.
+To get the results from the paper, run 'paper_run.py' instead.

@@ -69,7 +69,7 @@ class Agent:
     gail_batch_size = 128
     gail_epoch = 5
 
-    def __init__(self, env_def, processes=1, dir='.', version=0, lr=2.5e-4, reconstruct=None):
+    def __init__(self, env_def, processes=1, dir='.', version=0, lr=2e-4, architecture='base', dropout=0, reconstruct=None, r_weight=.05):
         self.env_def = env_def
         self.num_processes = processes #cpu processes
         self.lr = lr
@@ -109,7 +109,9 @@ class Agent:
                 self.envs.observation_space.shape,
                 self.envs.action_space,
                 base_kwargs={'recurrent': self.recurrent_policy,
-                             'shapes': list(reversed(self.env_def.model_shape))})
+                             'shapes': list(reversed(self.env_def.model_shape)),
+                             'dropout': dropout},
+                model=architecture)
         self.actor_critic.to(self.device)
 
         #Reconstruction
@@ -122,7 +124,7 @@ class Agent:
             self.r_model = lambda x: reconstruct.adapter(reconstruct(x))
             #self.r_model = lambda x: reconstruct.adapter(reconstruct(x)).clamp(min=1e-6).log()
             #self.r_loss = nn.L1Loss() #nn.NLLLoss() #nn.MSELoss()
-            self.r_loss = lambda pred, true: -(true*torch.log(pred.clamp(min=1e-7, max=1-1e-7))).sum(dim=1).mean()
+            self.r_loss = lambda pred, true: -r_weight*(true*torch.log(pred.clamp(min=1e-7, max=1-1e-7))).sum(dim=1).mean()
             self.r_optimizer = reconstruct.optimizer #optim.Adam(reconstruct.parameters(), lr = .0001)
 
         if self.algo == 'a2c':
@@ -216,7 +218,7 @@ class Agent:
         self.agent.optimizer.zero_grad()
         _, predictions, _ = self.actor_critic.base(x, hidden, mask)
         reconstructions = self.r_model(predictions)
-        loss = .05*self.r_loss(reconstructions, y) #.05
+        loss = self.r_loss(reconstructions, y)
         loss.backward()
         self.r_optimizer.step()
         self.agent.optimizer.step()
@@ -246,7 +248,7 @@ class Agent:
         mask = torch.ones_like(mask).float().unsqueeze(1)
         _, predictions, _ = self.actor_critic.base(x, hidden, mask)
         reconstructions = self.r_model(predictions)
-        loss = .05*self.r_loss(reconstructions, y)        #model -> x or x and a? x already contains action features
+        loss = self.r_loss(reconstructions, y)        #model -> x or x and a? x already contains action features
         loss.backward()
         self.r_optimizer.step()
         print(loss.item()) #add loss weight

@@ -18,13 +18,18 @@ class Flatten(nn.Module):
         return x.view(x.size(0), -1)
 
 class Policy(nn.Module):
-    def __init__(self, obs_shape, action_space, base=None, base_kwargs=None):
+    def __init__(self, obs_shape, action_space, base=None, base_kwargs=None, model='base'):
         super(Policy, self).__init__()
         if base_kwargs is None:
             base_kwargs = {}
         if base is None:
             if len(obs_shape) == 3:
-                base = CNNBase
+                if(model=='base'):
+                    base = CNNBase
+                elif(model=='resnet'):
+                    base = CNNDeep
+                else:
+                    raise Exception('Model not implemented')
             elif len(obs_shape) == 1:
                 base = MLPBase
             else:
@@ -188,13 +193,13 @@ class NNBase(nn.Module):
         return x, hxs
 
 class CNNBase(NNBase):
-    def __init__(self, num_inputs, shapes=[], recurrent=False, hidden_size=512):
+    def __init__(self, num_inputs, shapes=[], recurrent=False, hidden_size=512, dropout=0):
         super(CNNBase, self).__init__(recurrent, hidden_size, hidden_size)
 
         self.main = nn.Sequential(
              nn.Conv2d(num_inputs, 128, 3, padding=(3,1), stride=1), nn.ReLU(),
              nn.Conv2d(128, 64, 3, padding=1, stride=2), nn.ReLU(),
-             nn.Conv2d(64, 32, 3, padding=1, stride=2), nn.ReLU(), Flatten(), nn.Dropout(.3),
+             nn.Conv2d(64, 32, 3, padding=1, stride=2), nn.ReLU(), Flatten(), nn.Dropout(dropout),
              nn.Linear(32*4*4, hidden_size), nn.ReLU())
 
         self.critic_linear = nn.Linear(hidden_size, 1)
@@ -222,7 +227,7 @@ class ResidualBlock(nn.Module):
         return x + self.block(x)
 
 class CNNDeep(NNBase):
-    def __init__(self, num_inputs, shapes=[], recurrent=False, hidden_size=512):
+    def __init__(self, num_inputs, shapes=[], recurrent=False, hidden_size=512, dropout=0):
         super(CNNDeep, self).__init__(recurrent, hidden_size, hidden_size)
 
         self.block1 = nn.Sequential(

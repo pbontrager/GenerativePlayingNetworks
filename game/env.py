@@ -13,9 +13,10 @@ GameDescription['zelda'] = {'ascii':[".","w","g","+","1","2","3","A"],
 			     'requirements':["A","g","+"]}
 
 class Env:
-	def __init__(self, name, length):
+	def __init__(self, name, length, wrapper_args):
 		self.name = name
 		self.length = length
+		self.kwargs = wrapper_args
 		try:
 			self.ascii = GameDescription[name]['ascii']
 			self.mapping = GameDescription[name]['mapping']
